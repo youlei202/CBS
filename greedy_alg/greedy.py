@@ -114,7 +114,7 @@ class GreedyPruner():
             #print_active_tensors()
             if self.wgh_path is not None:
                 self.w, self.F, self.G = load_fisher_weight(self.wgh_path, self.load_F, self.load_G)
-                print_active_tensors()
+                # print_active_tensors()
                 self.w = torch.tensor(self.w).to(self.device)
                 if self.F is not None:
                     self.F = torch.tensor(self.F).to(self.device)
@@ -127,6 +127,7 @@ class GreedyPruner():
                 self.w = weights
                 self.F = fisher_matrix
                 self.G = grads
+        self.G = self.G.to(self.device) # added by lei
         if self.args.has_first_order_term_in_obj: 
             self.G_mean = self.G.mean(dim=0).to(self.device)
         else:

@@ -44,8 +44,7 @@ def setup_logging(args):
     console.setLevel(args.logging_level)
     logging.getLogger('').addHandler(console)
 
-    logging.info(f'Started logging run {run_id} of experiment {args.exp_name}, ' + \
-        f'saving checkpoints every {args.checkpoint_freq} epoch')
+    logging.info(f"Started logging run {run_id} of experiment {args.exp_name}, saving checkpoints every {args.checkpoint_freq} epoch")
 
     return args
 
