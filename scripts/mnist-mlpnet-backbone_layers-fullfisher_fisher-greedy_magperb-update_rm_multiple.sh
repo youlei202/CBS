@@ -11,8 +11,8 @@
 # Exp of updating weights follows the online-greedy algirithm.
 # Use the same experiment name as the one to get greedy results
 ###############################################################
-greedy_path=$5
-DIR="$(dirname "$(dirname $greedy_path)" )"
+GREEDY_PATH=$5
+DIR="$(dirname "$(dirname $GREEDY_PATH)" )"
 EXP_NAME="$(basename "$(dirname $DIR)")"
 script_name=${EXP_NAME}.sh
 
@@ -160,7 +160,7 @@ $ONE_SHOT \
 "
 
 if [ "$is_test" -eq 0 ] ; then
-    CUDA_VISIBLE_DEVICES=${GPU} python ${CODE_DIR}/main.py $args $greedy_args &> $LOG_PATH 2>&1
+    CUDA_VISIBLE_DEVICES=${GPU} python3 ${CODE_DIR}/main.py $args $greedy_args &> $LOG_PATH 2>&1
 else
-    CUDA_VISIBLE_DEVICES=${GPU} python ${CODE_DIR}/main.py $args $greedy_args 
+    CUDA_VISIBLE_DEVICES=${GPU} python3 ${CODE_DIR}/main.py $args $greedy_args 
 fi
