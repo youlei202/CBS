@@ -4,3 +4,4 @@ code-snapshot/
 __pycache__
 prob_regressor_data
 prob_regressor_results
+.history
