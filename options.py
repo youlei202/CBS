@@ -107,7 +107,7 @@ def get_parser():
     parser.add_argument('--prune-class', type=str, default='woodfisher',
                         choices=['magni', 'globalmagni', 'naivehess', 'diagfisher',
                                  'woodfisher', 'woodtaylor', 'woodfisherblock', 'woodtaylorblock',
-                                 'kfac', 'woodfisherblockgroup', 'woodfisherblockdynamic', 'woodfisherblock_flops', 'comb'],
+                                 'kfac', 'woodfisherblockgroup', 'woodfisherblockdynamic', 'woodfisherblock_flops', 'comb', 'optimal_transport'],
                         help='which pruner to use (assumes only 1 pruner)')
 
     parser.add_argument('--prune-optimizer', type=str, default=None, choices=['Adam', 'SGD', 'RMSprop'],
