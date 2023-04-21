@@ -277,6 +277,7 @@ from pruners.diagfisher import FisherPruner
 from pruners.naivehess import NaiveHessianPruner
 from pruners.woodfisherblock_flops import FlopsBlockwiseWoodburryFisherPruner
 from pruners.comb_pruner import CombinatorialPruner
+from pruners.optimal_transport_pruner import OptimalTransportPruner
 
 if __name__ == '__main__':
     pass
