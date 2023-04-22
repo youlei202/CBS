@@ -78,8 +78,8 @@ ${ONE_SHOT} \
 --max-mini-bsz ${MAX_MINI_BSZ} \
 "
 if [ "$is_test" -eq 0 ] ; then
-    CUDA_VISIBLE_DEVICES=${GPU} python ${CODE_DIR}/main.py $args $greedy_args &> $LOG_PATH 2>&1
+    CUDA_VISIBLE_DEVICES=${GPU} python3 ${CODE_DIR}/main.py $args $greedy_args &> $LOG_PATH 2>&1
 else
-    CUDA_VISIBLE_DEVICES=${GPU} python ${CODE_DIR}/main.py $args $greedy_args
+    CUDA_VISIBLE_DEVICES=${GPU} python3 ${CODE_DIR}/main.py $args $greedy_args
 fi
 
