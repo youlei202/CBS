@@ -77,22 +77,13 @@ class OptimalTransportPruner(GradualPruner):
         return grads, gTw
 
     def _get_weights(self):
-        params = []
-        m_idx = 0
-        for module in self._modules:
-            m_idx += 1
-            for name, param in module.named_parameters():
-                if self._weight_only and "bias" in name:
-                    continue
-                else:
-                    params.append(param)
-        # Do gradient_masking: mask out the parameters which have been pruned previously
-        # to avoid rogue calculations for the hessian
+        weights = []
 
         for idx, module in enumerate(self._modules):
-            params[idx].data.mul_(module.weight_mask)
-        params = flatten_tensor_list(params)
-        return params
+            assert self._weight_only
+            weights.append(module.weight.data.flatten())
+        weights = torch.cat(weights).to(module.weight.device)
+        return weights
 
     def _compute_sample_fisher(self, loss, return_outer_product=True):
 
@@ -217,9 +208,7 @@ class OptimalTransportPruner(GradualPruner):
             self._num_params = self._all_grads.shape[1]
             # self._goal = self.args.fisher_subsample_size
 
-    def _compute_woodburry_fisher_inverse(
-        self, dset, subset_inds, device, num_workers, debug=False
-    ):
+    def _compute_wgH(self, dset, subset_inds, device, num_workers, debug=False):
         st_time = time.perf_counter()
         self._model = self._model.to(device)
 
@@ -236,8 +225,8 @@ class OptimalTransportPruner(GradualPruner):
             sampler=SubsetRandomSampler(subset_inds),
         )
         ## get g and g^T * w, denoted as XX and yy respectively
-        XXs = []
-        yys = []
+        Gs = []
+        GTWs = []
 
         if self.args.aux_gpu_id != -1:
             aux_device = torch.device("cuda:{}".format(self.args.aux_gpu_id))
@@ -251,165 +240,60 @@ class OptimalTransportPruner(GradualPruner):
         else:
             criterion = F.nll_loss
 
+        self._fisher_inv = None
+
         num_batches = 0
         num_samples = 0
 
         FF = 0.0
-
-        stat_fisher_inv = []
         for in_tensor, target in dummy_loader:
-            self.grad_timer.start()
             self._release_grads()
 
             in_tensor, target = in_tensor.to(device), target.to(device)
             output = self._model(in_tensor)
-            loss = criterion(output, target)
+            try:
+                loss = criterion(output, target, reduction="none")
+            except:
+                import pdb
+
+                pdb.set_trace()
             # The default reduction = 'mean' will be used, over the fisher_mini_bsz,
             # which is just a practical heuristic to utilize more datapoints
 
             ## compute grads, XX, yy
-            sample_grads, _, gTw, w = self._compute_sample_fisher(
-                loss, return_outer_product=False
-            )
-            self.grad_timer.stop()
-            # XXs.append(sample_grads[None,:].detach().cpu().numpy())
-            # yys.append(gTw[None,None].detach().cpu().numpy())
+            g, _, gTw, w = self._compute_sample_fisher(loss, return_outer_product=False)
+            Gs.append(g[None, :].detach().cpu().numpy())
+            # GTWs.append(gTw[None,None].detach().cpu().numpy())
             w = w.detach().cpu().numpy()
-            # num_batches += 1
-            # num_samples += self._fisher_mini_bsz
-            # FF += sample_grads.detach().cpu().numpy()
+            # FF += ff
+            del g, gTw
 
-            # sample_grads, g, gTw, w = self._compute_sample_fisher(loss, return_outer_product=False)
-            if self.args.fisher_cpu:
-                sample_grads = sample_grads.cpu()
-
-            if aux_device is not None and aux_device != torch.device("cpu"):
-                sample_grads = sample_grads.to(aux_device)
-
-            # print(f'device of sample_grads is {sample_grads.device}')
-            if num_batches == 0:
-
-                numerator_normalization = (self.args.fisher_damp) ** 2
-
-                # rewrite in terms of inplace operations
-                self._fisher_inv = (
-                    torch.ger(sample_grads, sample_grads)
-                    .mul_(1.0 / numerator_normalization)
-                    .div_(
-                        goal + (sample_grads.dot(sample_grads) / self.args.fisher_damp)
-                    )
-                )
-                self._fisher_inv.diagonal().sub_(1.0 / self.args.fisher_damp)
-                # 1/self.args.fisher_damp \times Identity matrix is used to represent (H^-1)_0
-                self._fisher_inv.mul_(-1)
-
-            else:
-                cache_matmul = torch.matmul(self._fisher_inv, sample_grads)
-                # f = self._fisher_inv
-                # c = f @ g
-                cache_matmul.div_((goal + sample_grads.dot(cache_matmul)) ** 0.5)
-                # c = f @ g/sqrt(N + g^T @ f @ g)
-                if not self.args.fisher_optimized:
-                    self._fisher_inv.sub_(torch.ger(cache_matmul, cache_matmul))
-                else:
-                    assert self.args.fisher_parts > 1
-                    # F = F - x x' ??
-                    # f1 = -f
-                    self._fisher_inv.mul_(-1)
-                    # f1 = -f + c @ c^T
-                    self._add_outer_products_efficient_v1(
-                        self._fisher_inv, cache_matmul, num_parts=self.args.fisher_parts
-                    )
-                    # f1 = f - c @ c^T = f - f @ g @ g^T @ f^T /(N + g @ f @ g)
-                    self._fisher_inv.mul_(-1)
-
-                del cache_matmul
-
-                del sample_grads
-
-            # print("# of examples done {} and the goal is {}".format(num, goal))
-            stat_fisher_inv.append(
-                torch.tensor(
-                    [
-                        self._fisher_inv.min(),
-                        self._fisher_inv.max(),
-                        self._fisher_inv.mean(),
-                        self._fisher_inv.abs().mean(),
-                        self._fisher_inv.diagonal().mean(),
-                        self._fisher_inv.diagonal().abs().mean(),
-                    ]
-                )
-            )
             num_batches += 1
             num_samples += self._fisher_mini_bsz
-
             if num_samples == goal * self._fisher_mini_bsz:
                 break
-        # stat_fisher_inv = torch.stack(stat_fisher_inv, dim=0)
-        ##plt.plot(np.arange(num_samples), stat_fisher_inv[:,0], label='min', color='b')
-        ##plt.plot(np.arange(num_samples), stat_fisher_inv[:,1], label='max', color='r')
-        # plt.plot(np.arange(num_samples), stat_fisher_inv[:,2], label='mean', color='g')
-        # plt.plot(np.arange(num_samples), stat_fisher_inv[:,3], label='abs.mean', color='y')
-        ##plt.plot(np.arange(num_samples), stat_fisher_inv[:,4]-1000, label='diag.mean-1000', color='b')
-        ##plt.plot(np.arange(num_samples), stat_fisher_inv[:,5]-1000, label='diag.asb.mean-1000', color='r')
-        # plt.legend()
-        # plt.title(f'dampening factor: {self.args.fisher_damp:.2E}')
-        # plt.savefig(f'fisher_inv-damp_{self.args.fisher_damp:.2E}.pdf')
-        # plt.clf()
 
-        ###### save XXs and yys
-        ##XXs = np.concatenate(XXs, 0) * 1 / np.sqrt(self.args.fisher_subsample_size)
-        # XXs = np.concatenate(XXs, 0)
-        ##yys = np.concatenate(yys, 0) * 1/np.sqrt(self.args.fisher_subsample_size)
-        ##FF = FF / self.args.fisher_subsample_size
-        # wgF = {'g': XXs, 'gTw': yys, 'W': w, 'F': FF}
-        # wgF_path = './prob_regressor_data/' + \
-        #        f'{self.args.arch}_{self.args.dset}_{self.args.num_samples}samples_{self.args.fisher_subsample_size}batches_{self.args.seed}seed_allweights.pkl'
-        #        #f'{self.args.arch}_{self.args.dset}_{self.args.num_samples}samples_{self.args.fisher_subsample_size}batches_{self.args.seed}seed.pkl'
-        # with open(wgF_path, 'wb') as wgF_f:
-        #    pickle.dump(wgF, wgF_f, pickle.HIGHEST_PROTOCOL)
-        #### save fisher_inv
-        # wgF_path = './prob_regressor_data/' + \
-        #        f'mlp_mnist_{num_samples}samples_{self.args.fisher_subsample_size}batches_fisher_inv.pkl'
-        # with open(wgF_path, 'wb') as wgF_f:
-        #    pickle.dump({'f_inv': self._fisher_inv}, wgF_f, pickle.HIGHEST_PROTOCOL)
-        # import pdb;pdb.set_trace()
-
+        ## save Gs and GTWs
+        # grads = torch.cat(Gs, 0) * 1 / np.sqrt(self.args.fisher_subsample_size)
+        # wTgs = torch.cat(GTWs, 0) * 1/np.sqrt(self.args.fisher_subsample_size)
+        grads = torch.cat(Gs, 0)
+        wTgs = torch.cat(GTWs, 0)
+        # FF = FF / self.args.fisher_subsample_size
         print(
             "# of examples done {} and the goal (#outer products) is {}".format(
                 num_samples, goal
             )
         )
         print("# of batches done {}".format(num_batches))
-        self._fisher_inv_diag = self._fisher_inv.diagonal()
 
         end_time = time.perf_counter()
         print(
-            "Time taken to Fisher_inverse with woodburry is {} seconds".format(
+            "Time taken to compute fisher inverse with woodburry is {} seconds".format(
                 str(end_time - st_time)
             )
         )
 
-        if self.args.dump_fisher_inv_mat:
-            dump_tensor_to_mat(
-                self._fisher_inv.diagonal(),
-                self.args.run_dir,
-                "fisher_inv_diag.mat",
-                "fisher_inv_diag",
-            )
-
-        if self._inspect_inv:
-            print("---- Inspecting fisher inverse ----")
-            inspect_dic = get_summary_stats(self._fisher_inv)
-            inspect_dic["trace"] = self._fisher_inv.trace().item()
-            inspect_dic["sum"] = self._fisher_inv.sum().item()
-            inspect_dic["trace/sum"] = (
-                self._fisher_inv.trace() / self._fisher_inv.sum()
-            ).item()
-            self.inspect_dic = inspect_dic
-            print(self.inspect_dic)
-            print("-----------------------------------")
-        return end_time - st_time
+        return grads, GTWs, w, ff
 
     def on_epoch_begin(
         self, dset, subset_inds, device, num_workers, epoch_num, **kwargs
@@ -429,11 +313,21 @@ class OptimalTransportPruner(GradualPruner):
         if not hasattr(self, "_param_stats"):
             self._param_stats = []
 
+        grads, wTgs, weights, fisher_matrix = self._compute_wgH(
+            dset, subset_inds, device, num_workers, debug=False
+        )
+
+        H_approx = grads.T @ grads
+        print(H_approx.shape)
+
         meta["prune_direction"] = []
         meta["original_param"] = []
         meta["mask_previous"] = []
         meta["mask_overall"] = []
         meta["quad_term"] = []
         meta["inspect_dic"] = {}
+
+        for idx, module in enumerate(self._modules):
+            pass
 
         return True, meta
