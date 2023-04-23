@@ -156,7 +156,8 @@ class Manager:
         self.num_workers = args.workers
         self.batch_size = args.batch_size
         if (
-            "comb" in args.prune_class
+            "optimal_transport" in args.prune_class
+            or "comb" in args.prune_class
             or "woodfisher" in args.prune_class
             or "woodtaylor" in args.prune_class
             or "grad" in args.prune_class
