@@ -262,8 +262,8 @@ class OptimalTransportPruner(GradualPruner):
 
             ## compute grads, XX, yy
             g, _, gTw, w = self._compute_sample_fisher(loss, return_outer_product=False)
-            Gs.append(g[None, :].detach().cpu().numpy())
-            # GTWs.append(gTw[None,None].detach().cpu().numpy())
+            Gs.append(torch.Tensor(g[None, :].detach().cpu().numpy()))
+            GTWs.append(torch.Tensor(gTw[None, None].detach().cpu().numpy()))
             w = w.detach().cpu().numpy()
             # FF += ff
             del g, gTw
@@ -276,8 +276,8 @@ class OptimalTransportPruner(GradualPruner):
         ## save Gs and GTWs
         # grads = torch.cat(Gs, 0) * 1 / np.sqrt(self.args.fisher_subsample_size)
         # wTgs = torch.cat(GTWs, 0) * 1/np.sqrt(self.args.fisher_subsample_size)
-        grads = torch.cat(Gs, 0)
-        wTgs = torch.cat(GTWs, 0)
+        grads = torch.cat(tuple(Gs), 0)
+        wTgs = torch.cat(tuple(GTWs), 0)
         # FF = FF / self.args.fisher_subsample_size
         print(
             "# of examples done {} and the goal (#outer products) is {}".format(
