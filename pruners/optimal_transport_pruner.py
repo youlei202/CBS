@@ -85,19 +85,20 @@ class OptimalTransportPruner(GradualPruner):
         weights = torch.cat(weights).to(module.weight.device)
         return weights
 
-    def _compute_sample_fisher(self, loss, return_outer_product=True):
-
+    def _compute_sample_fisher(self, loss, return_outer_product=False):
+        """Inputs:
+            loss: scalar or B, Bx1 tensor
+        Outputs:
+            grads_batch: BxD
+            gTw: B (grads^T @ weights)
+            params: D
+            ff: 0.0 or DxD(sum of grads * grads^T)
+        """
         ys = loss
         params = []
-        m_idx = 0
         for module in self._modules:
-            # print("=====", self._module_names[m_idx])
-            m_idx += 1
             for name, param in module.named_parameters():
-                # print("{}:{}".format(name, param.shape))
-                # if 'bias' in name:
-                #    import pdb;pdb.set_trace()
-
+                # print("name is {} and shape of param is {} \n".format(name, param.shape))
                 if self._weight_only and "bias" in name:
                     continue
                 else:
@@ -115,9 +116,8 @@ class OptimalTransportPruner(GradualPruner):
         grads = flatten_tensor_list(grads)
         params = flatten_tensor_list(params)
 
-        # if self.args.dump_grads_mat:
-        #    self._all_grads.append(grads)
-        self._all_grads.append(grads)
+        if self.args.dump_grads_mat:
+            self._all_grads.append(grads)
 
         self._num_params = len(grads)
         self._old_weights = params
@@ -128,7 +128,7 @@ class OptimalTransportPruner(GradualPruner):
             # return grads, grads, gTw, params
             return grads, None, gTw, params
         else:
-            return torch.ger(grads, grads), grads, gTw, params
+            return grads, torch.ger(grads, grads), gTw, params
 
     def _get_pruned_wts_scaled_basis(self, pruned_params, flattened_params):
         # import pdb;pdb.set_trace()
