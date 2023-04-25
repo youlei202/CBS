@@ -293,7 +293,7 @@ class OptimalTransportPruner(GradualPruner):
             )
         )
 
-        return grads, GTWs, w, ff
+        return grads, GTWs, w, None
 
     def on_epoch_begin(
         self, dset, subset_inds, device, num_workers, epoch_num, **kwargs
