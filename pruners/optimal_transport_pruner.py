@@ -318,7 +318,7 @@ class OptimalTransportPruner(GradualPruner):
         )
 
         H_approx = grads.T @ grads
-        print(H_approx.shape)
+        print("The shape of the Hessian Approximation:", H_approx.shape)
 
         meta["prune_direction"] = []
         meta["original_param"] = []
