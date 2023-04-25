@@ -317,7 +317,14 @@ class OptimalTransportPruner(GradualPruner):
             dset, subset_inds, device, num_workers, debug=False
         )
 
+        st_time = time.perf_counter()
         H_approx = grads.T @ grads
+        end_time = time.perf_counter()
+        print(
+            "Time taken to compute the Hessian Approximation is {} seconds".format(
+                str(end_time - st_time)
+            )
+        )
         print("The shape of the Hessian Approximation:", H_approx.shape)
 
         meta["prune_direction"] = []
