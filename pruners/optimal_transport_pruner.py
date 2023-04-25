@@ -262,8 +262,8 @@ class OptimalTransportPruner(GradualPruner):
 
             ## compute grads, XX, yy
             g, _, gTw, w = self._compute_sample_fisher(loss, return_outer_product=False)
-            Gs.append(g[None, :].detach().cpu().numpy())
-            # GTWs.append(gTw[None,None].detach().cpu().numpy())
+            Gs.append(torch.Tensor(g[None, :].detach().cpu().numpy()))
+            GTWs.append(torch.Tensor(gTw[None, None].detach().cpu().numpy()))
             w = w.detach().cpu().numpy()
             # FF += ff
             del g, gTw
