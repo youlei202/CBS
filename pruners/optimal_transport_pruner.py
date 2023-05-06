@@ -345,6 +345,6 @@ class OptimalTransportPruner(GradualPruner):
         for idx, module in enumerate(self._modules):
             pass
 
-        meta["mask_previous"] = np.zeros_like(self._get_weights())
+        meta["mask_previous"] = torch.zeros_like(self._get_weights())
 
         return True, meta
