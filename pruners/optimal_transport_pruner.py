@@ -295,6 +295,20 @@ class OptimalTransportPruner(GradualPruner):
 
         return grads, GTWs, w, None
 
+    def _hard_threshold(self, x, k):
+        # Set all but the largest k elements in x to zero
+        threshold = np.partition(np.abs(x).flatten(), -k)[-k]
+        x[np.abs(x) < threshold] = 0
+        return x
+
+    def update_weights(self, w, w_target, k, X, y, tau, lam):
+
+        n = len(X)
+
+        w_new = w - tau * (X.T @ (X @ w - y) + n * lam * (w - w_target))
+
+        return self._hard_threshold(w_new, k)
+
     def on_epoch_begin(
         self, dset, subset_inds, device, num_workers, epoch_num, **kwargs
     ):
@@ -326,13 +340,6 @@ class OptimalTransportPruner(GradualPruner):
             )
         )
         print("The shape of the Hessian Approximation:", H_approx.shape)
-
-        meta["prune_direction"] = []
-        meta["original_param"] = []
-        meta["mask_previous"] = []
-        meta["mask_overall"] = []
-        meta["quad_term"] = []
-        meta["inspect_dic"] = {}
 
         for idx, module in enumerate(self._modules):
             pass
