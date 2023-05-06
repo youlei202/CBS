@@ -288,7 +288,7 @@ class OptimalTransportPruner(GradualPruner):
 
         end_time = time.perf_counter()
         print(
-            "Time taken to compute fisher inverse with woodburry is {} seconds".format(
+            "Time taken to compute empirical fisher is {} seconds".format(
                 str(end_time - st_time)
             )
         )
@@ -301,9 +301,10 @@ class OptimalTransportPruner(GradualPruner):
         x[np.abs(x) < threshold] = 0
         return x
 
-    def update_weights(self, w, w_target, k, X, y, tau, lam):
+    def update_weights(self, w_target, k, X, y, tau, lam):
 
         n = len(X)
+        w = self._get_weights()
 
         w_new = w - tau * (X.T @ (X @ w - y) + n * lam * (w - w_target))
 
@@ -343,5 +344,7 @@ class OptimalTransportPruner(GradualPruner):
 
         for idx, module in enumerate(self._modules):
             pass
+
+        meta["mask_previous"] = np.zeros_like(self._get_weights())
 
         return True, meta
