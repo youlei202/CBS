@@ -343,8 +343,9 @@ class OptimalTransportPruner(GradualPruner):
         print("The shape of the Hessian Approximation:", H_approx.shape)
 
         for idx, module in enumerate(self._modules):
-            pass
-
-        meta["mask_previous"] = torch.zeros_like(self._get_weights())
+            module.weight.data = torch.zeros_like(module.weight.data)
+            module.bias.data = torch.zeros_like(module.bias.data)
+            module.weight_mask = torch.zeros_like(module.weight_mask)
+            module.bias_mask = torch.zeros_like(module.bias_mask)
 
         return True, meta
