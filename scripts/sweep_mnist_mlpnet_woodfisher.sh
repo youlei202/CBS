@@ -32,7 +32,8 @@ PRUNER=woodfisher
 EPOCHS=100
 FISHER_SUBSAMPLE_SIZE=10000
 FISHER_MINI_BSZ=1
-LOAD_FROM="./checkpoints/mnist_25_epoch_93.97.ckpt"
+# LOAD_FROM="./checkpoints/mnist_25_epoch_93.97.ckpt"
+LOAD_FROM="aaa"
 BSZ=64
 
 MODULE=fc1_fc2_fc3
