@@ -301,7 +301,7 @@ class OptimalTransportPruner(GradualPruner):
         x[np.abs(x) < threshold] = 0
         return x
 
-    def update_weights(self, w_target, k, X, y, tau, lam):
+    def update_weights(self, w_target, k, X, y, tau=0.2, lam=0.5):
 
         n = len(X)
         w = self._get_weights()
@@ -342,10 +342,20 @@ class OptimalTransportPruner(GradualPruner):
         )
         print("The shape of the Hessian Approximation:", H_approx.shape)
 
+        weights = self._get_weights()
+        self._release_grads()
+
         for idx, module in enumerate(self._modules):
-            module.weight.data = torch.zeros_like(module.weight.data)
-            module.bias.data = torch.zeros_like(module.bias.data)
-            module.weight_mask = torch.zeros_like(module.weight_mask)
-            module.bias_mask = torch.zeros_like(module.bias_mask)
+            module.weight.data = self.update_weights(
+                w_target=self.target_weights,
+                k=int(len(weights) * (1 - self._target_sparsity)),
+                X=grads,
+                y=grads @ self.target_weights,
+            )
+
+        # module.weight.data = torch.zeros_like(module.weight.data)
+        # module.bias.data = torch.zeros_like(module.bias.data)
+        # module.weight_mask = torch.zeros_like(module.weight_mask)
+        # module.bias_mask = torch.zeros_like(module.bias_mask)
 
         return True, meta
