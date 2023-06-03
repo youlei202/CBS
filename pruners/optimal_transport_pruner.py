@@ -316,9 +316,10 @@ class OptimalTransportPruner(GradualPruner):
         meta = {}
         if self._pruner_not_active(epoch_num):
             print("Pruner is not ACTIVEEEE yaa!")
+            self.target_weights = self._get_weights
             return False, {}
 
-        # ensure that the model is not in training mode, this is importance, because
+        # ensure that the model is not in training mode, this is important, because
         # otherwise the pruning procedure will interfere and affect the batch-norm statistics
         assert not self._model.training
 
