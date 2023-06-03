@@ -343,13 +343,16 @@ class OptimalTransportPruner(GradualPruner):
 
         weights = self._get_weights()
         self._release_grads()
+        # print(self._old_weights.shape)
+        # print(grads.shape)
 
         new_w = self.update_weights(
-            w_target=self._old_weights,
+            w_target=self._old_weights.detach().numpy(),
             k=int(len(weights) * (1 - self._target_sparsity)),
             X=grads,
-            y=grads @ self._old_weights,
+            y=grads @ self._old_weights.detach().numpy(),
         )
+        print('THE WEIGHTS AFTER PRUNING IS:')
         print(new_w)
 
         # module.weight.data = torch.zeros_like(module.weight.data)
