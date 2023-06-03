@@ -4,7 +4,7 @@
 pruners:
   pruner_1:
     class: OptimalTransportPruner #NaiveHessianPruner #FisherPruner #MagnitudePruner #FisherPruner #WoodburryFisherPruner
-    epochs: [0,1,200] # prune_start, prune_freq, prune_end
+    epochs: [0,2,2] # prune_start, prune_freq, prune_end
 #    epochs: [0,10,10]
     weight_only: False
     initial_sparsity: 0.0

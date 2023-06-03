@@ -227,9 +227,10 @@ class OptimalTransportPruner(GradualPruner):
 
     def _hard_threshold(self, x, k):
         # Set all but the largest k elements in x to zero
-        threshold = np.partition(np.abs(x).flatten(), -k)[-k]
-        x[np.abs(x) < threshold] = 0
+        threshold = x.abs().flatten().kthvalue(int(x.numel() - k), dim=-1)[0]
+        x[x.abs() < threshold] = 0
         return x
+
 
     def _get_weight_update(self, w_target, k, X, y, tau=0.2, lam=0.5):
         n = len(X)
@@ -238,6 +239,7 @@ class OptimalTransportPruner(GradualPruner):
         w_new = w - tau * (X.T @ (X @ w - y) + n * lam * (w - w_target))
 
         return self._hard_threshold(w_new, k)
+
 
     def on_epoch_begin(
         self, dset, subset_inds, device, num_workers, epoch_num, **kwargs
@@ -281,25 +283,25 @@ class OptimalTransportPruner(GradualPruner):
         flat_module_weights_list = flatten_tensor_list(flat_module_weights_list)
 
         # Compute the weight updates using the custom function
-        grads, wTgs, weights, fisher_matrix = self._compute_wgH(
+        grads, _, _, _ = self._compute_wgH(
             dset, subset_inds, device, num_workers, debug=False
         )
+        weights = self._get_weights()
+        device = weights.device
         weight_updates = self._get_weight_update(
-            w_target=weights,
+            w_target=weights.to(device),
             k=int(len(weights) * (1 - self._target_sparsity)),
-            X=grads,
-            y=grads @ weights,
+            X=grads.to(device),
+            y=grads.to(device) @ weights.to(device),
         )
 
-        # Apply the weight updates to each module in the model and create the weight mask
         for idx, module in enumerate(self._modules):
-            weight_update = weight_updates[
-                module_param_indices_list[idx] : module_param_indices_list[idx + 1]
-            ]
-            weight_update = weight_update.view_as(module.weight)
-            module.weight[:] = weight_update
+            weight_update = weight_updates[module_param_indices_list[idx] : module_param_indices_list[idx + 1]]
+            weight_update = weight_update.view(module.weight.shape)
+            
+            with torch.no_grad():
+                module.weight.data = weight_update
 
-            # Create binary mask for the weights, with 1's where the weight is non-zero and 0's where it's zero
             mask = (module.weight != 0).float()
             module.weight_mask = mask
 
