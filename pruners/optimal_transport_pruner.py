@@ -43,7 +43,6 @@ class OptimalTransportPruner(GradualPruner):
             )
 
     def _compute_sample_grad_weight(self, loss):
-
         ys = loss
         params = []
         for module in self._modules:
@@ -302,7 +301,6 @@ class OptimalTransportPruner(GradualPruner):
         return x
 
     def update_weights(self, w_target, k, X, y, tau=0.2, lam=0.5):
-
         n = len(X)
         w = self._get_weights()
 
@@ -346,13 +344,13 @@ class OptimalTransportPruner(GradualPruner):
         weights = self._get_weights()
         self._release_grads()
 
-        for idx, module in enumerate(self._modules):
-            module.weight.data = self.update_weights(
-                w_target=self.target_weights,
-                k=int(len(weights) * (1 - self._target_sparsity)),
-                X=grads,
-                y=grads @ self.target_weights,
-            )
+        new_w = self.update_weights(
+            w_target=self._old_weights,
+            k=int(len(weights) * (1 - self._target_sparsity)),
+            X=grads,
+            y=grads @ self._old_weights,
+        )
+        print(new_w)
 
         # module.weight.data = torch.zeros_like(module.weight.data)
         # module.bias.data = torch.zeros_like(module.bias.data)
