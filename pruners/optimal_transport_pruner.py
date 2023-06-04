@@ -232,23 +232,33 @@ class OptimalTransportPruner(GradualPruner):
         x[x.abs() < threshold] = 0
         return x
 
-    def _get_weight_update(self, w_target, k, X, y, tau=0.2, lam=0.5):
-        n = len(X)
+    def _get_weight_update(self, grads, w_target, k, tau=0.2, lam=0.5):
+        n = len(grads)
         w = self._get_weights()
+        device = w.device
 
-        PI = self._get_transportation_plan(X, y)
+        PI = self._get_transportation_plan(grads=grads, w_target=w_target)
+        PI = PI.to(device)
 
+        X=grads.to(device)
+        w_target = w_target.to(device)
+        y=X @ w_target
         w_new = w - tau * (X.T @ PI @ (X @ w - y) + n * lam * (w - w_target))
 
         return self._hard_threshold(w_new, k)
 
-    def _get_transportation_plan(self, X, y, no_transport=False, reg=0.01):
-        n = len(X)
-        if no_transport:
+    def _get_transportation_plan(self, grads, w_target, transport=True, reg=1.0):
+        n = len(grads)
+        if not transport:
             return torch.eye(n)
         w = self._get_weights()
-        original_distr = y
-        embedded_distr = X @ w
+        
+        original_distr = grads.to('cpu') * w_target.to('cpu')
+        embedded_distr = grads.to('cpu') * w.to('cpu')
+
+        original_distr = original_distr.detach().numpy()
+        embedded_distr = embedded_distr.detach().numpy()
+
         original_distr_mass = [1 / n for i in range(n)]
         embedded_distr_mass = [1 / n for i in range(n)]
 
@@ -256,23 +266,16 @@ class OptimalTransportPruner(GradualPruner):
         M = ot.dist(original_distr, embedded_distr, metric="sqeuclidean")
 
         PI = ot.sinkhorn(original_distr_mass, embedded_distr_mass, M, reg)
-        return PI
-
-    def _get_weight_update_wasserstain(self, w_target, k, X, y, tau=0.2, lam=0.5):
-        n = len(X)
-        w = self._get_weights()
-
-        PI = torch.eye(n)
-
-        v = X @ w
-
-        w_new = w - tau * (X.T @ PI @ (X @ w - y) + n * lam * (w - w_target))
-
-        return self._hard_threshold(w_new, k)
+        plt.imshow(PI)
+        plt.savefig('transportation_plan.pdf', format='pdf')
+        return torch.from_numpy(PI).float().to(w.device)
 
     def on_epoch_begin(
         self, dset, subset_inds, device, num_workers, epoch_num, **kwargs
     ):
+        if epoch_num <= 0:
+            self._target_weights = self._get_weights()
+
         meta = {}
         if self._pruner_not_active(epoch_num):
             print("Pruner is not ACTIVEEEE yaa!")
@@ -315,13 +318,11 @@ class OptimalTransportPruner(GradualPruner):
         grads, _, _, _ = self._compute_wgH(
             dset, subset_inds, device, num_workers, debug=False
         )
-        weights = self._get_weights()
-        device = weights.device
+
         weight_updates = self._get_weight_update(
-            w_target=weights.to(device),
-            k=int(len(weights) * (1 - self._target_sparsity)),
-            X=grads.to(device),
-            y=grads.to(device) @ weights.to(device),
+            grads = grads,
+            w_target=self._target_weights,
+            k=int(grads.shape[1] * (1 - self._target_sparsity)),
         )
 
         for idx, module in enumerate(self._modules):
