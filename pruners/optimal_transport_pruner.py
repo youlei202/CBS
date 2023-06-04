@@ -3,6 +3,7 @@ import math
 import numpy as np
 import pickle
 import matplotlib.pyplot as plt
+import ot
 
 import torch
 import torch.optim as optim
@@ -231,15 +232,43 @@ class OptimalTransportPruner(GradualPruner):
         x[x.abs() < threshold] = 0
         return x
 
-
     def _get_weight_update(self, w_target, k, X, y, tau=0.2, lam=0.5):
         n = len(X)
         w = self._get_weights()
 
-        w_new = w - tau * (X.T @ (X @ w - y) + n * lam * (w - w_target))
+        PI = self._get_transportation_plan(X, y)
+
+        w_new = w - tau * (X.T @ PI @ (X @ w - y) + n * lam * (w - w_target))
 
         return self._hard_threshold(w_new, k)
 
+    def _get_transportation_plan(self, X, y, no_transport=False, reg=0.01):
+        n = len(X)
+        if no_transport:
+            return torch.eye(n)
+        w = self._get_weights()
+        original_distr = y
+        embedded_distr = X @ w
+        original_distr_mass = [1 / n for i in range(n)]
+        embedded_distr_mass = [1 / n for i in range(n)]
+
+        # Compute the cost matrix (squared Euclidean distance) between original_distr and embedded_distr
+        M = ot.dist(original_distr, embedded_distr, metric="sqeuclidean")
+
+        PI = ot.sinkhorn(original_distr_mass, embedded_distr_mass, M, reg)
+        return PI
+
+    def _get_weight_update_wasserstain(self, w_target, k, X, y, tau=0.2, lam=0.5):
+        n = len(X)
+        w = self._get_weights()
+
+        PI = torch.eye(n)
+
+        v = X @ w
+
+        w_new = w - tau * (X.T @ PI @ (X @ w - y) + n * lam * (w - w_target))
+
+        return self._hard_threshold(w_new, k)
 
     def on_epoch_begin(
         self, dset, subset_inds, device, num_workers, epoch_num, **kwargs
@@ -296,9 +325,11 @@ class OptimalTransportPruner(GradualPruner):
         )
 
         for idx, module in enumerate(self._modules):
-            weight_update = weight_updates[module_param_indices_list[idx] : module_param_indices_list[idx + 1]]
+            weight_update = weight_updates[
+                module_param_indices_list[idx] : module_param_indices_list[idx + 1]
+            ]
             weight_update = weight_update.view(module.weight.shape)
-            
+
             with torch.no_grad():
                 module.weight.data = weight_update
 
