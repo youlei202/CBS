@@ -331,11 +331,13 @@ class OptimalTransportPruner(GradualPruner):
             ]
             weight_update = weight_update.view(module.weight.shape)
 
-            with torch.no_grad():
-                module.weight.data = weight_update
 
-            mask = (module.weight != 0).float()
+
+            mask = (weight_update != 0).float()
             # mask = torch.load(f'saved_masks/woodfisher_weight_mask_{idx}.pth')
             module.weight_mask = mask
+
+            with torch.no_grad():
+                module.weight.data = module.weight.data * mask
 
         return True, meta
