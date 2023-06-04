@@ -51,7 +51,7 @@ mkdir -p ${LOG_DIR}
 RESULT_PATH="${CSV_DIR}/${name}.csv"
 LOG_PATH="${LOG_DIR}/${name}.log"
 
-ONE_SHOT="--one-shot"
+# ONE_SHOT="--one-shot"
 SCALE_PRUNE_UPDATE=0.9
 
 echo "EXPERIMENT $EXP_NAME"

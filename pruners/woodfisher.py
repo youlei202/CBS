@@ -688,4 +688,7 @@ class WoodburryFisherPruner(GradualPruner):
 
         if self._inspect_inv:
             meta["inspect_dic"] = self.inspect_dic
+
+        # for idx, module in enumerate(self._modules):
+        #     torch.save(module.weight_mask, f'saved_masks/woodfisher_weight_mask_{idx}.pth')
         return True, meta

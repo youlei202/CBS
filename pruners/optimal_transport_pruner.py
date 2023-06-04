@@ -143,7 +143,7 @@ class OptimalTransportPruner(GradualPruner):
         st_time = time.perf_counter()
         self._model = self._model.to(device)
 
-        print("in woodfisher: len of subset_inds is ", len(subset_inds))
+        print("in optimal transport pruning: len of subset_inds is ", len(subset_inds))
 
         goal = self.args.fisher_subsample_size
 
@@ -232,13 +232,15 @@ class OptimalTransportPruner(GradualPruner):
         x[x.abs() < threshold] = 0
         return x
 
-    def _get_weight_update(self, grads, w_target, k, tau=0.2, lam=0.5):
+    def _get_weight_update(self, grads, w_target, k, tau=0.002, lam=20):
         n = len(grads)
         w = self._get_weights()
         device = w.device
 
-        PI = self._get_transportation_plan(grads=grads, w_target=w_target)
+        PI = self._get_transportation_plan(grads=grads, w_target=w_target, transport=True)
         PI = PI.to(device)
+        plt.imshow(PI.to('cpu'))
+        plt.savefig('transportation_plan.pdf', format='pdf')
 
         X=grads.to(device)
         w_target = w_target.to(device)
@@ -247,7 +249,7 @@ class OptimalTransportPruner(GradualPruner):
 
         return self._hard_threshold(w_new, k)
 
-    def _get_transportation_plan(self, grads, w_target, transport=True, reg=1.0):
+    def _get_transportation_plan(self, grads, w_target, transport=True, reg=0.01):
         n = len(grads)
         if not transport:
             return torch.eye(n)
@@ -266,8 +268,6 @@ class OptimalTransportPruner(GradualPruner):
         M = ot.dist(original_distr, embedded_distr, metric="sqeuclidean")
 
         PI = ot.sinkhorn(original_distr_mass, embedded_distr_mass, M, reg)
-        plt.imshow(PI)
-        plt.savefig('transportation_plan.pdf', format='pdf')
         return torch.from_numpy(PI).float().to(w.device)
 
     def on_epoch_begin(
@@ -335,6 +335,7 @@ class OptimalTransportPruner(GradualPruner):
                 module.weight.data = weight_update
 
             mask = (module.weight != 0).float()
+            # mask = torch.load(f'saved_masks/woodfisher_weight_mask_{idx}.pth')
             module.weight_mask = mask
 
         return True, meta
