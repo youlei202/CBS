@@ -239,7 +239,7 @@ class OptimalTransportPruner(GradualPruner):
         x[x.abs() < threshold] = 0
         return x
 
-    def _get_weight_update(self, grads, w_target, k, tau, lam, transport):
+    def _get_weight_update(self, grads, w_target, k, lam, transport):
         n = len(grads)
         w, masks = self._get_weights()
         device = w.device
@@ -257,7 +257,17 @@ class OptimalTransportPruner(GradualPruner):
         X=grads.to(device)
         w_target = w_target.to(device)
         y=X @ w_target
-        w_new = w - tau * (X.T @ PI @ (X @ w - y) + n * lam * (w - w_target))
+
+        n_torch = torch.tensor(n, device=device)
+        lam_torch = torch.tensor(lam, device=device)
+        X_norm = torch.linalg.norm(X, ord=2)
+        PI_norm = torch.linalg.norm(PI, ord=2)
+        L = n_torch * lam_torch + X_norm * PI_norm * X_norm
+
+        tau = 1 / L
+        print(f'Tau is {tau}')
+
+        w_new = w - tau * (X.T @ PI @ (X @ w - y) + n_torch * lam_torch * (w - w_target))
         print('First part:', X.T @ PI @ (X @ w - y))
         print('Second part:', n * lam * (w - w_target))
         print('The value of w:', w)
@@ -282,7 +292,7 @@ class OptimalTransportPruner(GradualPruner):
         # Compute the cost matrix (squared Euclidean distance) between original_distr and embedded_distr
         M = ot.dist(original_distr, embedded_distr, metric="sqeuclidean")
 
-        PI = ot.sinkhorn(original_distr_mass, embedded_distr_mass, M, reg, numItermax=5000) * n
+        PI = ot.sinkhorn(original_distr_mass, embedded_distr_mass, M, reg, numItermax=5000)
         np.savetxt("PI.csv", PI, delimiter=",")
         # np.savetxt("M.csv", M, delimiter=",")
         return torch.from_numpy(PI).float().to(w.device)
@@ -342,7 +352,7 @@ class OptimalTransportPruner(GradualPruner):
             grads = grads,
             w_target=self._target_weights,
             k=int(grads.shape[1] * (1 - self._target_sparsity)),
-            tau=5, lam=0,
+            lam=0,
             transport=self.args.ot,
         )
 
