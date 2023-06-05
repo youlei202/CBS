@@ -614,30 +614,30 @@ class WoodburryFisherPruner(GradualPruner):
                 f"for param {idx}: norm of weight update is {torch.norm(weight_update).item()}"
             )
 
-            if self.args.local_quadratic:
-                weight_update = weight_update.view(cache_weight_update_shape)
-                # (e^T F^-1 e)/2 which is what comes out,
-                # when you plug in weight_update to quadratic term
-                meta["quad_term"].append(
-                    torch.dot(weight_update, scaled_basis_vector) / 2
-                )
-                weight_update = weight_update.view_as(module.weight)
-                print("quad term comes out to be", meta["quad_term"])
+            # if self.args.local_quadratic:
+            #     weight_update = weight_update.view(cache_weight_update_shape)
+            #     # (e^T F^-1 e)/2 which is what comes out,
+            #     # when you plug in weight_update to quadratic term
+            #     meta["quad_term"].append(
+            #         torch.dot(weight_update, scaled_basis_vector) / 2
+            #     )
+            #     weight_update = weight_update.view_as(module.weight)
+            #     print("quad term comes out to be", meta["quad_term"])
 
-            ## TODO: prune_direction seems for analysis of the change of pruning mask
-            if self._prune_direction:
-                meta["prune_direction"].append(weight_update)
-                meta["original_param"].append(module.weight.data.clone())
-                print("idx is ", idx)
-                # print(flat_pruned_weights_list)
-                # dirty hack that works when only 1 layer
-                meta["mask_previous"].append(
-                    module.weight_mask
-                    + flat_pruned_weights_list.view(module_shapes_list[idx]).type(
-                        module.weight_mask.dtype
-                    )
-                )
-                meta["mask_overall"].append(module.weight_mask)
+            # ## TODO: prune_direction seems for analysis of the change of pruning mask
+            # if self._prune_direction:
+            #     meta["prune_direction"].append(weight_update)
+            #     meta["original_param"].append(module.weight.data.clone())
+            #     print("idx is ", idx)
+            #     # print(flat_pruned_weights_list)
+            #     # dirty hack that works when only 1 layer
+            #     meta["mask_previous"].append(
+            #         module.weight_mask
+            #         + flat_pruned_weights_list.view(module_shapes_list[idx]).type(
+            #             module.weight_mask.dtype
+            #         )
+            #     )
+            #     meta["mask_overall"].append(module.weight_mask)
 
             # print('weight before is ', module.weight)
             if not self.args.not_update_weights:
@@ -667,27 +667,27 @@ class WoodburryFisherPruner(GradualPruner):
             f"Time taken to WF (without gradients and fisher_inv) is {wf_time:.2f} seconds"
         )
 
-        self._release_grads()
-        new_w = weight_updates + self._old_weights
-        score = flatten_tensor_list(self._param_stats)
-        analyze_new_weights(
-            new_w=new_w,
-            old_w=self._old_weights,
-            update_w=weight_updates,
-            score=score,
-            info=f"damp_{self.args.fisher_damp:.2E}",
-        )
+        # self._release_grads()
+        # new_w = weight_updates + self._old_weights
+        # score = flatten_tensor_list(self._param_stats)
+        # analyze_new_weights(
+        #     new_w=new_w,
+        #     old_w=self._old_weights,
+        #     update_w=weight_updates,
+        #     score=score,
+        #     info=f"damp_{self.args.fisher_damp:.2E}",
+        # )
 
-        # check if all the params whose fisher inverse was computed their value has been taken
-        print(
-            f"param_idx is {self._param_idx} and fisher_inv_shape[0] is {self._fisher_inv_diag.shape[0]} \n"
-        )
-        assert self._param_idx == self._fisher_inv_diag.shape[0]
+        # # check if all the params whose fisher inverse was computed their value has been taken
+        # print(
+        #     f"param_idx is {self._param_idx} and fisher_inv_shape[0] is {self._fisher_inv_diag.shape[0]} \n"
+        # )
+        # assert self._param_idx == self._fisher_inv_diag.shape[0]
 
-        del self._fisher_inv
+        # del self._fisher_inv
 
-        if self._inspect_inv:
-            meta["inspect_dic"] = self.inspect_dic
+        # if self._inspect_inv:
+        #     meta["inspect_dic"] = self.inspect_dic
 
         # for idx, module in enumerate(self._modules):
         #     torch.save(module.weight_mask, f'saved_masks/woodfisher_weight_mask_{idx}.pth')
