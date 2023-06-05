@@ -239,7 +239,7 @@ class OptimalTransportPruner(GradualPruner):
         x[x.abs() < threshold] = 0
         return x
 
-    def _get_weight_update(self, grads, w_target, k, tau=0.2, lam=0.05, transport=False):
+    def _get_weight_update(self, grads, w_target, k, tau, lam, transport):
         n = len(grads)
         w, masks = self._get_weights()
         device = w.device
@@ -250,7 +250,7 @@ class OptimalTransportPruner(GradualPruner):
         plt.savefig('transportation_plan.pdf', format='pdf')
         # print(PI)
 
-        lam = (lam / n) if transport else lam
+        # lam = (lam / n) if transport else lam
 
         print(f'Lambda is {lam}')
 
@@ -282,7 +282,7 @@ class OptimalTransportPruner(GradualPruner):
         # Compute the cost matrix (squared Euclidean distance) between original_distr and embedded_distr
         M = ot.dist(original_distr, embedded_distr, metric="sqeuclidean")
 
-        PI = ot.sinkhorn(original_distr_mass, embedded_distr_mass, M, reg, numItermax=5000)
+        PI = ot.sinkhorn(original_distr_mass, embedded_distr_mass, M, reg, numItermax=5000) * n
         np.savetxt("PI.csv", PI, delimiter=",")
         # np.savetxt("M.csv", M, delimiter=",")
         return torch.from_numpy(PI).float().to(w.device)
@@ -342,6 +342,8 @@ class OptimalTransportPruner(GradualPruner):
             grads = grads,
             w_target=self._target_weights,
             k=int(grads.shape[1] * (1 - self._target_sparsity)),
+            tau=5, lam=0,
+            transport=self.args.ot,
         )
 
         for idx, module in enumerate(self._modules):
