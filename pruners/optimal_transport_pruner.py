@@ -232,24 +232,33 @@ class OptimalTransportPruner(GradualPruner):
         x[x.abs() < threshold] = 0
         return x
 
-    def _get_weight_update(self, grads, w_target, k, tau=0.002, lam=20):
+    def _get_weight_update(self, grads, w_target, k, tau=0.2, lam=0.05, transport=True):
         n = len(grads)
         w = self._get_weights()
         device = w.device
 
-        PI = self._get_transportation_plan(grads=grads, w_target=w_target, transport=True)
+        PI = self._get_transportation_plan(grads=grads, w_target=w_target, reg=1e-2, transport=transport)
         PI = PI.to(device)
         plt.imshow(PI.to('cpu'))
         plt.savefig('transportation_plan.pdf', format='pdf')
+        # print(PI)
+
+        lam = (lam / n) if transport else lam
+
+        print(f'Lambda is {lam}')
 
         X=grads.to(device)
         w_target = w_target.to(device)
         y=X @ w_target
         w_new = w - tau * (X.T @ PI @ (X @ w - y) + n * lam * (w - w_target))
+        print('First part:', X.T @ PI @ (X @ w - y))
+        print('Second part:', n * lam * (w - w_target))
+        print('The value of w:', w)
+        print('The value of w_new', w_new)
 
         return self._hard_threshold(w_new, k)
 
-    def _get_transportation_plan(self, grads, w_target, transport=True, reg=0.01):
+    def _get_transportation_plan(self, grads, w_target, reg, transport):
         n = len(grads)
         if not transport:
             return torch.eye(n)
@@ -267,7 +276,9 @@ class OptimalTransportPruner(GradualPruner):
         # Compute the cost matrix (squared Euclidean distance) between original_distr and embedded_distr
         M = ot.dist(original_distr, embedded_distr, metric="sqeuclidean")
 
-        PI = ot.sinkhorn(original_distr_mass, embedded_distr_mass, M, reg)
+        PI = ot.sinkhorn(original_distr_mass, embedded_distr_mass, M, reg, numItermax=5000)
+        np.savetxt("PI.csv", PI, delimiter=",")
+        # np.savetxt("M.csv", M, delimiter=",")
         return torch.from_numpy(PI).float().to(w.device)
 
     def on_epoch_begin(
