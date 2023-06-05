@@ -82,12 +82,15 @@ class OptimalTransportPruner(GradualPruner):
 
     def _get_weights(self):
         weights = []
+        masks = []
 
         for idx, module in enumerate(self._modules):
             assert self._weight_only
             weights.append(module.weight.data.flatten())
+            masks.append(module.weight_mask.data.flatten())
         weights = torch.cat(weights).to(module.weight.device)
-        return weights
+        masks = torch.cat(masks).to(module.weight_mask.device)
+        return weights, masks
 
     def _compute_sample_fisher(self, loss, return_outer_product=False):
         """Inputs:
@@ -238,10 +241,10 @@ class OptimalTransportPruner(GradualPruner):
 
     def _get_weight_update(self, grads, w_target, k, tau=0.2, lam=0.05, transport=False):
         n = len(grads)
-        w = self._get_weights()
+        w, masks = self._get_weights()
         device = w.device
 
-        PI = self._get_transportation_plan(grads=grads, w_target=w_target, reg=0.05, transport=transport)
+        PI = self._get_transportation_plan(grads=grads, w=w, w_target=w_target, reg=0.05, transport=transport)
         PI = PI.to(device)
         plt.imshow(PI.to('cpu'))
         plt.savefig('transportation_plan.pdf', format='pdf')
@@ -262,11 +265,10 @@ class OptimalTransportPruner(GradualPruner):
 
         return self._hard_threshold(w_new, k)
 
-    def _get_transportation_plan(self, grads, w_target, reg, transport):
+    def _get_transportation_plan(self, grads, w, w_target, reg, transport):
         n = len(grads)
         if not transport:
             return torch.eye(n)
-        w = self._get_weights()
         
         original_distr = grads.to('cpu') * w_target.to('cpu')
         embedded_distr = grads.to('cpu') * w.to('cpu')
@@ -292,12 +294,12 @@ class OptimalTransportPruner(GradualPruner):
         meta = {}
         if self._pruner_not_active(epoch_num):
             print("Pruner is not ACTIVEEEE yaa!")
-            if OptimalTransportPruner:have_not_started_pruning:
-                self._target_weights = self._get_weights()
+            if OptimalTransportPruner.have_not_started_pruning:
+                self._target_weights, _ = self._get_weights()
                 print('Target weights updated')
             return False, {}
 
-        OptimalTransportPruner:have_not_started_pruning = False
+        OptimalTransportPruner.have_not_started_pruning = False
         # ensure that the model is not in training mode, this is importance, because
         # otherwise the pruning procedure will interfere and affect the batch-norm statistics
         assert not self._model.training
