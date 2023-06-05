@@ -244,13 +244,10 @@ class OptimalTransportPruner(GradualPruner):
         w, masks = self._get_weights()
         device = w.device
 
-        PI = self._get_transportation_plan(grads=grads, w=w, w_target=w_target, reg=0.05, transport=transport)
+        PI = self._get_transportation_plan(grads=grads, w=w, w_target=w_target, reg=0.1, transport=transport)
         PI = PI.to(device)
         plt.imshow(PI.to('cpu'))
         plt.savefig('transportation_plan.pdf', format='pdf')
-        # print(PI)
-
-        # lam = (lam / n) if transport else lam
 
         print(f'Lambda is {lam}')
 
@@ -352,7 +349,7 @@ class OptimalTransportPruner(GradualPruner):
             grads = grads,
             w_target=self._target_weights,
             k=int(grads.shape[1] * (1 - self._target_sparsity)),
-            lam=0,
+            lam=0.05,
             transport=self.args.ot,
         )
 
