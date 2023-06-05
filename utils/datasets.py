@@ -7,6 +7,7 @@ import torch
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import sklearn.datasets as sklearn_datasets
+import numpy as np
 
 from torch.utils.data import TensorDataset
 
@@ -16,7 +17,16 @@ DATASETS_NAMES = ['imagenet', 'cifar10', 'cifar100', 'mnist', 'imagenette']
 
 __all__ = ["get_datasets"]
 
-
+class AddGaussianNoise(object):
+    def __init__(self, mean=0., std=1.):
+        self.std = std
+        self.mean = mean
+        
+    def __call__(self, tensor):
+        return tensor + torch.randn(tensor.size()) * self.std + self.mean
+    
+    def __repr__(self):
+        return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
 
 def classification_dataset_str_from_arch(arch):
     if 'cifar100' in arch:
@@ -95,14 +105,16 @@ def mnist_get_datasets(data_dir):
     # same used in hessian repo!
     train_transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
+        transforms.Normalize((0.1307,), (0.3081,)),
+        AddGaussianNoise(0., 3. if np.random.uniform(0,1) < 0.1 else 0)
     ])
     train_dataset = datasets.MNIST(root=data_dir, train=True,
                                    download=True, transform=train_transform)
 
     test_transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
+        transforms.Normalize((0.1307,), (0.3081,)),
+        AddGaussianNoise(0., 3. if np.random.uniform(0,1) < 0.1 else 0)
     ])
     test_dataset = datasets.MNIST(root=data_dir, train=False,
                                   transform=test_transform)
