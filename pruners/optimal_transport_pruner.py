@@ -19,7 +19,11 @@ from common.io import _load, _dump
 from common.timer import Timer
 
 
+
+
 class OptimalTransportPruner(GradualPruner):
+    have_not_started_pruning = True
+
     def __init__(self, model, inp_args, **kwargs):
         super(OptimalTransportPruner, self).__init__(model, inp_args, **kwargs)
         print("In Optimal Transport Pruner")
@@ -232,12 +236,12 @@ class OptimalTransportPruner(GradualPruner):
         x[x.abs() < threshold] = 0
         return x
 
-    def _get_weight_update(self, grads, w_target, k, tau=0.2, lam=0.05, transport=True):
+    def _get_weight_update(self, grads, w_target, k, tau=0.2, lam=0.05, transport=False):
         n = len(grads)
         w = self._get_weights()
         device = w.device
 
-        PI = self._get_transportation_plan(grads=grads, w_target=w_target, reg=1e-2, transport=transport)
+        PI = self._get_transportation_plan(grads=grads, w_target=w_target, reg=0.05, transport=transport)
         PI = PI.to(device)
         plt.imshow(PI.to('cpu'))
         plt.savefig('transportation_plan.pdf', format='pdf')
@@ -284,14 +288,16 @@ class OptimalTransportPruner(GradualPruner):
     def on_epoch_begin(
         self, dset, subset_inds, device, num_workers, epoch_num, **kwargs
     ):
-        if epoch_num <= 0:
-            self._target_weights = self._get_weights()
 
         meta = {}
         if self._pruner_not_active(epoch_num):
             print("Pruner is not ACTIVEEEE yaa!")
+            if OptimalTransportPruner:have_not_started_pruning:
+                self._target_weights = self._get_weights()
+                print('Target weights updated')
             return False, {}
 
+        OptimalTransportPruner:have_not_started_pruning = False
         # ensure that the model is not in training mode, this is importance, because
         # otherwise the pruning procedure will interfere and affect the batch-norm statistics
         assert not self._model.training
