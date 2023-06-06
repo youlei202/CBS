@@ -52,6 +52,7 @@ RESULT_PATH="${CSV_DIR}/${name}.csv"
 LOG_PATH="${LOG_DIR}/${name}.log"
 
 # ONE_SHOT="--one-shot"
+OPTIMAL_TRANSPORTATION="--ot"
 SCALE_PRUNE_UPDATE=0.9
 
 echo "EXPERIMENT $EXP_NAME"
@@ -74,6 +75,7 @@ args="
 ${ONE_SHOT} \
 --result-file $RESULT_PATH --epochs $EPOCHS \
 --scale-prune-update ${SCALE_PRUNE_UPDATE} \
+${OPTIMAL_TRANSPORTATION} \
 "
 if [ "$is_test" -eq 0 ] ; then
     CUDA_VISIBLE_DEVICES=${GPU} python3 ${CODE_DIR}/main.py $args $greedy_args &> $LOG_PATH 2>&1
