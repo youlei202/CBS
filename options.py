@@ -879,5 +879,10 @@ def get_parser():
         action="store_true",
         help="Consider the first order term in the objective function or not (default: False)",
     )
+    parser.add_argument(
+        "--ot",
+        action="store_true",
+        help="Enable optimal transportation!",
+    )
 
     return parser.parse_args()
