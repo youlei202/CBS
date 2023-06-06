@@ -106,7 +106,7 @@ def mnist_get_datasets(data_dir):
     train_transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.1307,), (0.3081,)),
-        AddGaussianNoise(0., 3. if np.random.uniform(0,1) < 0.1 else 0)
+        # AddGaussianNoise(0., 3) 
     ])
     train_dataset = datasets.MNIST(root=data_dir, train=True,
                                    download=True, transform=train_transform)
@@ -114,7 +114,7 @@ def mnist_get_datasets(data_dir):
     test_transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.1307,), (0.3081,)),
-        AddGaussianNoise(0., 3. if np.random.uniform(0,1) < 0.1 else 0)
+        # AddGaussianNoise(0., 3) 
     ])
     test_dataset = datasets.MNIST(root=data_dir, train=False,
                                   transform=test_transform)
