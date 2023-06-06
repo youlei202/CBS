@@ -259,12 +259,12 @@ class OptimalTransportPruner(GradualPruner):
         lam_torch = torch.tensor(lam, device=device)
         X_norm = torch.linalg.norm(X, ord=2)
         PI_norm = torch.linalg.norm(PI, ord=2)
-        L = n_torch * lam_torch + X_norm * PI_norm * X_norm
+        L = lam_torch + X_norm * PI_norm * X_norm
 
         tau = 1 / L
         print(f'Tau is {tau}')
 
-        w_new = w - tau * (X.T @ PI @ (X @ w - y) + n_torch * lam_torch * (w - w_target))
+        w_new = w - tau * (X.T @ PI @ (X @ w - y) + lam_torch * (w - w_target))
         print('First part:', X.T @ PI @ (X @ w - y))
         print('Second part:', n * lam * (w - w_target))
         print('The value of w:', w)
@@ -275,7 +275,7 @@ class OptimalTransportPruner(GradualPruner):
     def _get_transportation_plan(self, grads, w, w_target, reg, transport):
         n = len(grads)
         if not transport:
-            return torch.eye(n)
+            return torch.eye(n) * 1/n
         
         original_distr = grads.to('cpu') * w_target.to('cpu')
         embedded_distr = grads.to('cpu') * w.to('cpu')
