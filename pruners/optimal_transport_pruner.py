@@ -17,8 +17,7 @@ from policies.pruners import GradualPruner
 from utils.plot import analyze_new_weights
 from common.io import _load, _dump
 from common.timer import Timer
-
-
+from copy import copy
 
 
 class OptimalTransportPruner(GradualPruner):
@@ -46,39 +45,6 @@ class OptimalTransportPruner(GradualPruner):
                 "./prob_regressor_data",
                 f"{self.args.arch}_{self.args.dset}_{N_samples}samples_{N_batches}batches_{seed}seed.fisher_inv",
             )
-
-    def _compute_sample_grad_weight(self, loss):
-        ys = loss
-        params = []
-        for module in self._modules:
-            for name, param in module.named_parameters():
-                print(
-                    "name is {} and shape of param is {} \n".format(name, param.shape)
-                )
-
-                if self._weight_only and "bias" in name:
-                    continue
-                else:
-                    params.append(param)
-        grads = torch.autograd.grad(ys, params)  # first order gradient
-
-        # Do gradient_masking: mask out the parameters which have been pruned previously
-        # to avoid rogue calculations for the hessian
-
-        for idx, module in enumerate(self._modules):
-            grads[idx].data.mul_(module.weight_mask)
-            params[idx].data.mul_(module.weight_mask)
-
-        grads = flatten_tensor_list(grads)
-        params = flatten_tensor_list(params)
-
-        # if self.args.dump_grads_mat:
-        #    self._all_grads.append(grads)
-
-        self._num_params = len(grads)
-
-        gTw = params.T @ grads
-        return grads, gTw
 
     def _get_weights(self):
         weights = []
@@ -129,7 +95,8 @@ class OptimalTransportPruner(GradualPruner):
         self._num_params = len(grads)
         self._old_weights = params
 
-        gTw = params.T @ grads
+        # gTw = params.T @ grads
+        gTw = None
 
         if not return_outer_product:
             # return grads, grads, gTw, params
@@ -239,46 +206,81 @@ class OptimalTransportPruner(GradualPruner):
         x[x.abs() < threshold] = 0
         return x
 
-    def _get_weight_update(self, grads, w_target, k, lam, transport):
-        n = len(grads)
-        w, masks = self._get_weights()
-        device = w.device
+    def _set_weights(self, weight_updates, module_param_indices_list):
+        for idx, module in enumerate(self._modules):
+            weight = weight_updates[
+                module_param_indices_list[idx] : module_param_indices_list[idx + 1]
+            ]
+            weight = weight.view(module.weight.shape)
 
-        PI = self._get_transportation_plan(grads=grads, w=w, w_target=w_target, reg=0.1, transport=transport)
-        PI = PI.to(device)
-        plt.imshow(PI.to('cpu'))
-        plt.savefig('transportation_plan.pdf', format='pdf')
+            mask = (weight != 0).float()
+            module.weight_mask = mask
 
-        print(f'Lambda is {lam}')
+            with torch.no_grad():
+                module.weight.data = module.weight.data * mask
 
-        X=grads.to(device)
-        w_target = w_target.to(device)
-        y=X @ w_target
-
-        n_torch = torch.tensor(n, device=device)
+    def _get_weight_update(
+        self,
+        params_num,
+        lam,
+        transport,
+        dset,
+        subset_inds,
+        device,
+        num_workers,
+        module_param_indices_list,
+        iter_num,
+    ):
+        sparsity_levels = np.arange(0, self._target_sparsity + 1e-10, 1 / iter_num)[1:]
         lam_torch = torch.tensor(lam, device=device)
-        X_norm = torch.linalg.norm(X, ord=2)
+        PI = torch.eye(n) * 1 / n
         PI_norm = torch.linalg.norm(PI, ord=2)
-        L = lam_torch + X_norm * PI_norm * X_norm
+        w_bar, _ = self._get_weights()
+        w = copy(w_bar)
+        w = w.to(device)
+        for i, sparsity in enumerate(sparsity_levels):
+            print(f"Iteration {i}:")
+            non_zero_params_num = int(params_num * (1 - sparsity))
+            grads, _, _, _ = self._compute_wgH(
+                dset, subset_inds, device, num_workers, debug=False
+            )
+            n = len(grads)
 
-        tau = 1 / L
-        print(f'Tau is {tau}')
+            X = grads.to(device)
+            y = X @ w_bar
+            X_norm = torch.linalg.norm(X, ord=2)
 
-        w_new = w - tau * (X.T @ PI @ (X @ w - y) + lam_torch * (w - w_target))
-        print('First part:', X.T @ PI @ (X @ w - y))
-        print('Second part:', n * lam * (w - w_target))
-        print('The value of w:', w)
-        print('The value of w_new', w_new)
+            L = lam_torch + X_norm * PI_norm * X_norm
+            print(f"Step size tau is {1/L}")
 
-        return self._hard_threshold(w_new, k)
+            w_new = w - (1 / L) * (X.T @ PI @ (X @ w - y) + lam_torch * (w - w_bar))
+            print("\t First part:", X.T @ PI @ (X @ w - y))
+            print("\t Second part:", lam * (w - w_bar))
+
+            w_bar = w
+            w = self._hard_threshold(w_new, non_zero_params_num)
+            print(f"\t The value of w_{i-1}:", w_bar)
+            print(f"\t The value of w_{i}", w)
+
+            self._set_weights(
+                weight_updates=w, module_param_indices_list=module_param_indices_list
+            )
+            print("\t Model weights updated")
+
+            PI = self._get_transportation_plan(
+                grads=grads, w=w, w_target=w_bar, reg=0.1, transport=transport
+            ).to(device)
+
+        plt.imshow(PI.to("cpu"))
+        plt.savefig("transportation_plan.pdf", format="pdf")
 
     def _get_transportation_plan(self, grads, w, w_target, reg, transport):
         n = len(grads)
         if not transport:
-            return torch.eye(n) * 1/n
-        
-        original_distr = grads.to('cpu') * w_target.to('cpu')
-        embedded_distr = grads.to('cpu') * w.to('cpu')
+            return torch.eye(n) * 1 / n
+
+        original_distr = grads.to("cpu") * w_target.to("cpu")
+        embedded_distr = grads.to("cpu") * w.to("cpu")
 
         original_distr = original_distr.detach().numpy()
         embedded_distr = embedded_distr.detach().numpy()
@@ -289,7 +291,9 @@ class OptimalTransportPruner(GradualPruner):
         # Compute the cost matrix (squared Euclidean distance) between original_distr and embedded_distr
         M = ot.dist(original_distr, embedded_distr, metric="sqeuclidean")
 
-        PI = ot.sinkhorn(original_distr_mass, embedded_distr_mass, M, reg, numItermax=5000)
+        PI = ot.sinkhorn(
+            original_distr_mass, embedded_distr_mass, M, reg, numItermax=5000
+        )
         np.savetxt("PI.csv", PI, delimiter=",")
         # np.savetxt("M.csv", M, delimiter=",")
         return torch.from_numpy(PI).float().to(w.device)
@@ -297,13 +301,12 @@ class OptimalTransportPruner(GradualPruner):
     def on_epoch_begin(
         self, dset, subset_inds, device, num_workers, epoch_num, **kwargs
     ):
-
         meta = {}
         if self._pruner_not_active(epoch_num):
             print("Pruner is not ACTIVEEEE yaa!")
             if OptimalTransportPruner.have_not_started_pruning:
                 self._target_weights, _ = self._get_weights()
-                print('Target weights updated')
+                print("Target weights updated")
             return False, {}
 
         OptimalTransportPruner.have_not_started_pruning = False
@@ -344,28 +347,16 @@ class OptimalTransportPruner(GradualPruner):
         grads, _, _, _ = self._compute_wgH(
             dset, subset_inds, device, num_workers, debug=False
         )
-
-        weight_updates = self._get_weight_update(
-            grads = grads,
-            w_target=self._target_weights,
-            k=int(grads.shape[1] * (1 - self._target_sparsity)),
+        self._get_weight_update(
+            params_num=grads.shape[1],
             lam=0.05,
             transport=self.args.ot,
+            dset=dset,
+            subset_inds=subset_inds,
+            device=device,
+            num_workers=num_workers,
+            module_param_indices_list=module_param_indices_list,
+            iter_num=20,
         )
-
-        for idx, module in enumerate(self._modules):
-            weight_update = weight_updates[
-                module_param_indices_list[idx] : module_param_indices_list[idx + 1]
-            ]
-            weight_update = weight_update.view(module.weight.shape)
-
-
-
-            mask = (weight_update != 0).float()
-            # mask = torch.load(f'saved_masks/woodfisher_weight_mask_{idx}.pth')
-            module.weight_mask = mask
-
-            with torch.no_grad():
-                module.weight.data = module.weight.data * mask
 
         return True, meta
