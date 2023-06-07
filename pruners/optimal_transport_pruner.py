@@ -168,7 +168,7 @@ class OptimalTransportPruner(GradualPruner):
             ## compute grads, XX, yy
             g, _, gTw, w = self._compute_sample_fisher(loss, return_outer_product=False)
             Gs.append(torch.Tensor(g[None, :].detach().cpu().numpy()))
-            GTWs.append(torch.Tensor(gTw[None, None].detach().cpu().numpy()))
+            # GTWs.append(torch.Tensor(gTw[None, None].detach().cpu().numpy()))
             w = w.detach().cpu().numpy()
             # FF += ff
             del g, gTw
@@ -182,7 +182,7 @@ class OptimalTransportPruner(GradualPruner):
         # grads = torch.cat(Gs, 0) * 1 / np.sqrt(self.args.fisher_subsample_size)
         # wTgs = torch.cat(GTWs, 0) * 1/np.sqrt(self.args.fisher_subsample_size)
         grads = torch.cat(tuple(Gs), 0)
-        wTgs = torch.cat(tuple(GTWs), 0)
+        # wTgs = torch.cat(tuple(GTWs), 0)
         # FF = FF / self.args.fisher_subsample_size
         print(
             "# of examples done {} and the goal (#outer products) is {}".format(
@@ -202,7 +202,9 @@ class OptimalTransportPruner(GradualPruner):
 
     def _hard_threshold(self, x, k):
         # Set all but the largest k elements in x to zero
-        threshold = x.abs().flatten().kthvalue(int(x.numel() - k), dim=-1)[0]
+        if k < 1:
+            return torch.zeros(len(x))
+        threshold = x.abs().flatten().kthvalue(int(x.numel() - k + 1), dim=-1)[0]
         x[x.abs() < threshold] = 0
         return x
 
@@ -221,7 +223,8 @@ class OptimalTransportPruner(GradualPruner):
 
     def _get_weight_update(
         self,
-        params_num,
+        grads,
+        target_weights,
         lam,
         transport,
         dset,
@@ -231,36 +234,55 @@ class OptimalTransportPruner(GradualPruner):
         module_param_indices_list,
         iter_num,
     ):
-        sparsity_levels = np.arange(0, self._target_sparsity + 1e-10, 1 / iter_num)[1:]
+        n = len(grads)
+        params_num=grads.shape[1]
+        init_sparsity = 0
+        # sparsity_levels = np.arange(init_sparsity, self._target_sparsity + 1e-10, 1 / iter_num * (self._target_sparsity - init_sparsity))[1:]
+        sparsity_levels = [self._target_sparsity for i in range(iter_num)]
         lam_torch = torch.tensor(lam, device=device)
+        n_torch = torch.tensor(n, device=device)
         PI = torch.eye(n) * 1 / n
         PI_norm = torch.linalg.norm(PI, ord=2)
-        w_bar, _ = self._get_weights()
-        w = copy(w_bar)
+        PI = PI.to(device)
+        w, _ = self._get_weights()
+        w_bar = copy(target_weights)
         w = w.to(device)
+        w_bar = w_bar.to(device)
         for i, sparsity in enumerate(sparsity_levels):
             print(f"Iteration {i}:")
             non_zero_params_num = int(params_num * (1 - sparsity))
             grads, _, _, _ = self._compute_wgH(
                 dset, subset_inds, device, num_workers, debug=False
             )
-            n = len(grads)
 
             X = grads.to(device)
             y = X @ w_bar
             X_norm = torch.linalg.norm(X, ord=2)
 
-            L = lam_torch + X_norm * PI_norm * X_norm
-            print(f"Step size tau is {1/L}")
+            if not transport:
+                L = n_torch * lam_torch + X_norm ** 2 
+                L = L.to(device) 
+                print(f"Step size tau is {1/L}")
+                print("\t w", w)
+                print("\t w_bar", w_bar)
+                w_new = w - (1 / L) * (X.T @ (X @ w - y) + n_torch * lam_torch * (w - w_bar))
+                print("\t First part:", (1/L)*(X.T @ (X @ w - y)))
+                print("\t Second part:", (1/L)*(n_torch * lam_torch * (w - w_bar)))
+            else:
+                L = lam_torch + X_norm * X_norm * PI_norm 
+                L = L.to(device) 
+                print(f"Step size tau is {1/L}")
+                print("\t w", w)
+                print("\t w_bar", w_bar)
+                w_new = w - (1 / L) * (X.T @ PI @ (X @ w - y) + lam_torch * (w - w_bar))
+                print("\t First part:", (1/L)*(X.T @ PI @ (X @ w - y)))
+                print("\t Second part:", (1/L)*(lam_torch * (w - w_bar)))
+            
+            # w_bar = w
 
-            w_new = w - (1 / L) * (X.T @ PI @ (X @ w - y) + lam_torch * (w - w_bar))
-            print("\t First part:", X.T @ PI @ (X @ w - y))
-            print("\t Second part:", lam * (w - w_bar))
-
-            w_bar = w
+            print(f"\t Non-zero value num of w_{i}:", (w!=0).sum() )
             w = self._hard_threshold(w_new, non_zero_params_num)
-            print(f"\t The value of w_{i-1}:", w_bar)
-            print(f"\t The value of w_{i}", w)
+            print(f"\t Non-zero value num of w_{i+1}", (w!=0).sum())
 
             self._set_weights(
                 weight_updates=w, module_param_indices_list=module_param_indices_list
@@ -348,15 +370,16 @@ class OptimalTransportPruner(GradualPruner):
             dset, subset_inds, device, num_workers, debug=False
         )
         self._get_weight_update(
-            params_num=grads.shape[1],
-            lam=0.05,
+            grads=grads,
+            target_weights=self._target_weights,
+            lam=0.001,
             transport=self.args.ot,
             dset=dset,
             subset_inds=subset_inds,
             device=device,
             num_workers=num_workers,
             module_param_indices_list=module_param_indices_list,
-            iter_num=20,
+            iter_num=50,
         )
 
         return True, meta
