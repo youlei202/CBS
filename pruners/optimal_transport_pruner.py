@@ -221,6 +221,15 @@ class OptimalTransportPruner(GradualPruner):
             with torch.no_grad():
                 module.weight.data = module.weight.data * mask
 
+    def _pruning_objective(self, X, y, w, w_bar, lam):
+        n = X.shape[0]
+        lam_torch = torch.tensor(lam, device=w.device)
+        Q = (
+            1 / 2 * torch.linalg.norm(y - X @ w) ** 2
+            + n * lam_torch * torch.linalg.norm(w - w_bar) ** 2
+        )
+        return Q
+
     def _get_weight_update(
         self,
         grads,
@@ -235,10 +244,14 @@ class OptimalTransportPruner(GradualPruner):
         iter_num,
     ):
         n = len(grads)
-        params_num=grads.shape[1]
+        params_num = grads.shape[1]
         init_sparsity = 0
-        sparsity_levels = np.arange(init_sparsity, self._target_sparsity + 1e-10, 1 / iter_num * (self._target_sparsity - init_sparsity))[1:]
-        # sparsity_levels = [self._target_sparsity for i in range(iter_num)]
+        # sparsity_levels = np.arange(
+        #     init_sparsity,
+        #     self._target_sparsity + 1e-10,
+        #     1 / iter_num * (self._target_sparsity - init_sparsity),
+        # )[1:]
+        sparsity_levels = [self._target_sparsity for i in range(iter_num)]
         lam_torch = torch.tensor(lam, device=device)
         n_torch = torch.tensor(n, device=device)
         PI = torch.eye(n) * 1 / n
@@ -260,34 +273,44 @@ class OptimalTransportPruner(GradualPruner):
             X_norm = torch.linalg.norm(X, ord=2)
 
             if not transport:
-                print('\t Perform no transport update')
-                L = n_torch * lam_torch + X_norm ** 2 
-                L = L.to(device) 
+                print("\t Perform no transport update")
+                L = n_torch * lam_torch + X_norm**2
+                L = L.to(device)
                 print(f"\t Step size tau is {1/L}")
                 print("\t w", w)
                 print("\t w_bar", w_bar)
-                w_new = w - (1 / L) * (X.T @ (X @ w - y) + n_torch * lam_torch * (w - w_bar))
-                print("\t First part sum:", (1/L)*(X.T @ (X @ w - y)).abs().sum())
-                print("\t Second part sum:", (1/L)*(n_torch * lam_torch * (w - w_bar)).abs().sum())
+                w_new = w - (1 / L) * (
+                    X.T @ (X @ w - y) + n_torch * lam_torch * (w - w_bar)
+                )
+                print("\t First part sum:", (1 / L) * (X.T @ (X @ w - y)).abs().sum())
+                print(
+                    "\t Second part sum:",
+                    (1 / L) * (n_torch * lam_torch * (w - w_bar)).abs().sum(),
+                )
                 np.savetxt(f"logs/X_{i+1}.csv", (X.T).cpu(), delimiter=",")
             else:
-                print('\t Perform optimal transport update')
-                L = lam_torch + X_norm * X_norm * PI_norm 
-                L = L.to(device) 
+                print("\t Perform optimal transport update")
+                L = lam_torch + X_norm * X_norm * PI_norm
+                L = L.to(device)
                 print(f"\t Step size tau is {1/L}")
                 print("\t w", w)
                 print("\t w_bar", w_bar)
                 w_new = w - (1 / L) * (X.T @ PI @ (X @ w - y) + lam_torch * (w - w_bar))
-                print("\t First part sum:", (1/L)*(X.T @ PI @ (X @ w - y)).abs().sum())
-                print("\t Second part sum:", (1/L)*(lam_torch * (w - w_bar)).abs().sum())
+                print(
+                    "\t First part sum:", (1 / L) * (X.T @ PI @ (X @ w - y)).abs().sum()
+                )
+                print(
+                    "\t Second part sum:",
+                    (1 / L) * (lam_torch * (w - w_bar)).abs().sum(),
+                )
                 np.savetxt(f"logs/X_PI{i+1}.csv", (X.T @ PI).cpu(), delimiter=",")
-            
-            w_bar = copy(w)
+
+            # w_bar = copy(w)
             w_old = copy(w)
 
-            print(f"\t Non-zero value num of w_{i}:", (w!=0).sum() )
+            print(f"\t Non-zero value num of w_{i}:", (w != 0).sum())
             w = self._hard_threshold(w_new, non_zero_params_num)
-            print(f"\t Non-zero value num of w_{i+1}", (w!=0).sum())
+            print(f"\t Non-zero value num of w_{i+1}", (w != 0).sum())
 
             self._set_weights(
                 weight_updates=w, module_param_indices_list=module_param_indices_list
@@ -298,8 +321,11 @@ class OptimalTransportPruner(GradualPruner):
                 grads=grads, w=w, w_target=w_bar, reg=0.05, transport=transport
             ).to(device)
 
-            weight_norm_change = torch.norm(w-w_old)
-            print(f'weight norm change: {weight_norm_change}')
+            Q = self._pruning_objective(X=X, y=y, w=w, w_bar=w_bar)
+            print(f"\t Objective function value: {Q}")
+
+            # weight_norm_change = torch.norm(w - w_old)
+            # print(f"weight norm change: {weight_norm_change}")
 
         plt.imshow(PI.to("cpu"))
         plt.savefig("transportation_plan.pdf", format="pdf")
