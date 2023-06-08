@@ -30,9 +30,10 @@ DATA_PATH=../datasets/
 CONFIG_PATH=./configs/mlpnet_mnist_config_optimal_transport.yaml
 PRUNER=optimal_transport
 EPOCHS=10
-FISHER_SUBSAMPLE_SIZE=100
-FISHER_MINI_BSZ=100
-LOAD_FROM="./checkpoints/mnist_25_epoch_93.97.ckpt"
+FISHER_SUBSAMPLE_SIZE=10
+FISHER_MINI_BSZ=1000
+# LOAD_FROM="./checkpoints/mnist_25_epoch_93.97.ckpt"
+LOAD_FROM=None
 BSZ=64
 
 MODULE=fc1_fc2_fc3
