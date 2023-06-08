@@ -221,13 +221,19 @@ class OptimalTransportPruner(GradualPruner):
             with torch.no_grad():
                 module.weight.data = module.weight.data * mask
 
-    def _pruning_objective(self, X, y, w, w_bar, lam):
+    def _pruning_objective(self, X, y, PI, w, w_bar, lam, ot_dist, transport):
         n = X.shape[0]
         lam_torch = torch.tensor(lam, device=w.device)
-        Q = (
-            1 / 2 * torch.linalg.norm(y - X @ w) ** 2
-            + n * lam_torch * torch.linalg.norm(w - w_bar) ** 2
-        )
+
+        if not transport:
+            Q = (
+                (1/2) * torch.linalg.norm(y - X @ w) ** 2
+                + (n/2) * lam_torch * torch.linalg.norm(w - w_bar) ** 2
+            )
+        else:
+            Q = (
+                (1/2) * ot_dist + (n/2) * lam_torch * torch.linalg.norm(w - w_bar) ** 2
+            )
         return Q
 
     def _get_weight_update(
@@ -317,11 +323,13 @@ class OptimalTransportPruner(GradualPruner):
             )
             print("\t Model weights updated")
 
-            PI = self._get_transportation_plan(
+            PI, ot_dist = self._get_transportation_plan(
                 grads=grads, w=w, w_target=w_bar, reg=0.05, transport=transport
-            ).to(device)
+            )
+            PI = PI.to(device)
+            ot_dist = ot_dist.to(device)
 
-            Q = self._pruning_objective(X=X, y=y, w=w, w_bar=w_bar)
+            Q = self._pruning_objective(X=X, y=y, PI=PI, w=w, w_bar=w_bar, lam=lam, ot_dist=ot_dist, transport=transport)
             print(f"\t Objective function value: {Q}")
 
             # weight_norm_change = torch.norm(w - w_old)
@@ -347,12 +355,12 @@ class OptimalTransportPruner(GradualPruner):
         # Compute the cost matrix (squared Euclidean distance) between original_distr and embedded_distr
         M = ot.dist(original_distr, embedded_distr, metric="sqeuclidean")
 
-        PI = ot.sinkhorn(
+        PI = ot.bregman.sinkhorn_knopp(
             original_distr_mass, embedded_distr_mass, M, reg, numItermax=5000
         )
         np.savetxt("PI.csv", PI, delimiter=",")
         # np.savetxt("M.csv", M, delimiter=",")
-        return torch.from_numpy(PI).float().to(w.device)
+        return torch.from_numpy(PI).float().to(w.device), torch.tensor(np.sum(PI*M))
 
     def on_epoch_begin(
         self, dset, subset_inds, device, num_workers, epoch_num, **kwargs
