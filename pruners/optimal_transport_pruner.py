@@ -151,17 +151,36 @@ class OptimalTransportPruner(GradualPruner):
         num_samples = 0
 
         FF = 0.0
+
+        def add_noise(tensor, noise_factor=1):
+            tensor = tensor.float() # Convert tensor to float
+            noise_factor = torch.tensor(noise_factor).to(tensor.device)
+            noise = torch.randn_like(tensor) * noise_factor
+            return tensor + noise
+            # return torch.zeros_like(tensor)
+
+        def randomize_labels(labels, fraction=0.25):
+            num_random_labels = int(fraction * len(labels))
+            random_indices = torch.randperm(len(labels))[:num_random_labels]
+            random_labels = torch.randint(low=0, high=10, size=(num_random_labels,))
+            labels[random_indices] = random_labels
+            return labels
+
         for in_tensor, target in dummy_loader:
             self._release_grads()
 
+            in_tensor = add_noise(in_tensor) 
+            target = randomize_labels(target)
+
             in_tensor, target = in_tensor.to(device), target.to(device)
             output = self._model(in_tensor)
-            try:
-                loss = criterion(output, target, reduction="mean")
-            except:
-                import pdb
+            loss = criterion(output, target, reduction="mean")
+            # try:
+            #     loss = criterion(output, target, reduction="mean")
+            # except:
+            #     import pdb
 
-                pdb.set_trace()
+            #     pdb.set_trace()
             # The default reduction = 'mean' will be used, over the fisher_mini_bsz,
             # which is just a practical heuristic to utilize more datapoints
 
@@ -198,6 +217,7 @@ class OptimalTransportPruner(GradualPruner):
             )
         )
 
+        # grads = torch.zeros_like(grads)
         return grads, GTWs, w, None
 
     def __P(self, vector, k):
@@ -275,7 +295,7 @@ class OptimalTransportPruner(GradualPruner):
         x[x.abs() < threshold] = 0
         return x
 
-    def _set_weights(self, weight_updates, module_param_indices_list):
+    def _set_weights(self, weight_updates, module_param_indices_list, set_mask):
         for idx, module in enumerate(self._modules):
             weight = weight_updates[
                 module_param_indices_list[idx] : module_param_indices_list[idx + 1]
@@ -283,7 +303,8 @@ class OptimalTransportPruner(GradualPruner):
             weight = weight.view(module.weight.shape)
 
             mask = (weight != 0).float()
-            module.weight_mask = mask
+            if set_mask:
+                module.weight_mask = mask
 
             with torch.no_grad():
                 module.weight.data = module.weight.data * mask
@@ -344,7 +365,7 @@ class OptimalTransportPruner(GradualPruner):
         embedded_distr_mass = [1 / n for i in range(n)]
 
         PI = ot.bregman.sinkhorn(
-            original_distr_mass, embedded_distr_mass, M, reg
+            original_distr_mass, embedded_distr_mass, M, reg=reg, numItermax=5000
         )
         # PI = ot.emd(original_distr_mass, embedded_distr_mass, M)
         np.savetxt("PI.csv", PI, delimiter=",")
@@ -493,12 +514,16 @@ class OptimalTransportPruner(GradualPruner):
             print(f"\t Non-zero value num of w_{i+1}", (w != 0).sum())
 
             self._set_weights(
-                weight_updates=w, module_param_indices_list=module_param_indices_list
+                weight_updates=w, module_param_indices_list=module_param_indices_list, set_mask=False
             )
             print("\t Model weights updated")
 
-        np.savetxt("Xw.csv", (X @ w).detach().cpu().numpy(), delimiter=",")
-        np.savetxt("Xwbar.csv", (X @ w_bar).detach().cpu().numpy(), delimiter=",")
+        np.savetxt("X.csv", (X).detach().cpu().numpy(), delimiter=",")
+        np.savetxt("w.csv", (w).detach().cpu().numpy(), delimiter=",")
+        np.savetxt("w_bar.csv", (w_bar).detach().cpu().numpy(), delimiter=",")
+        self._set_weights(
+            weight_updates=w, module_param_indices_list=module_param_indices_list, set_mask=True
+        )
 
 
 
@@ -554,15 +579,15 @@ class OptimalTransportPruner(GradualPruner):
         self._get_weight_update(
             grads=grads,
             target_weights=self._target_weights,
-            lam=0,
+            lam=0.5,
             transport=self.args.ot,
-            reg=1,
+            reg=5,
             dset=dset,
             subset_inds=subset_inds,
             device=device,
             num_workers=num_workers,
             module_param_indices_list=module_param_indices_list,
-            iter_num=40,
+            iter_num=20,
         )
 
         return True, meta
