@@ -31,7 +31,7 @@ mkdir -p ${CSV_DIR}
 #CKP_PATH="${ROOT_DIR}/checkpoints/resnet20_cifar10.pth.tar"
 CKP_PATH="${ROOT_DIR}/../exp_root/exp_oct_21_resnet20_all_rep/20211026_18-55-28_694095_239/regular_checkpoint.ckpt"
 
-# OPTIMAL_TRANSPORTATION="--ot"
+OPTIMAL_TRANSPORTATION="--ot"
 extra_cmd=" ${OPTIMAL_TRANSPORTATION}  "
 
 ID=0
