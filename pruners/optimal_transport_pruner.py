@@ -153,7 +153,7 @@ class OptimalTransportPruner(GradualPruner):
         FF = 0.0
 
         def add_noise(tensor, noise_factor=1):
-            tensor = tensor.float() # Convert tensor to float
+            tensor = tensor.float()  # Convert tensor to float
             noise_factor = torch.tensor(noise_factor).to(tensor.device)
             noise = torch.randn_like(tensor) * noise_factor
             return tensor + noise
@@ -169,7 +169,7 @@ class OptimalTransportPruner(GradualPruner):
         for in_tensor, target in dummy_loader:
             self._release_grads()
 
-            in_tensor = add_noise(in_tensor) 
+            in_tensor = add_noise(in_tensor)
             target = randomize_labels(target)
 
             in_tensor, target = in_tensor.to(device), target.to(device)
@@ -220,14 +220,14 @@ class OptimalTransportPruner(GradualPruner):
         # grads = torch.zeros_like(grads)
         return grads, GTWs, w, None
 
-    def __P(self, vector, k):
+    def __top_k_indice(self, vector, k):
         """Function to get the indices of the k largest values of a vector"""
         _, indices = torch.topk(vector.abs(), k)
         return set(indices.tolist())
 
     def __same_support(self, a, b, k):
         """Check if two vectors have the same support"""
-        return self.__P(a, k) == self.__P(b, k)
+        return self.__top_k_indice(a, k) == self.__top_k_indice(b, k)
 
     def __find_tau_c(self, a, b, k, eps=1e-6):
         """Find the largest tau such that the support of a-tau*b is the same as a"""
@@ -253,11 +253,11 @@ class OptimalTransportPruner(GradualPruner):
 
         a = self._hard_threshold(a, k)
 
-        a = a.to('cpu')
-        b = b.to('cpu')
+        a = a.to("cpu")
+        b = b.to("cpu")
 
         mask = (a != 0).float()
-        b *= mask.to('cpu')
+        b *= mask.to("cpu")
 
         for i in range(1000):
             optimizer.zero_grad()
@@ -269,19 +269,19 @@ class OptimalTransportPruner(GradualPruner):
                 lam=lam,
                 reg=reg,
                 transport=transport,
-                PI = PI
+                PI=PI,
             )
             loss.backward()
             optimizer.step()
 
-            print(f'\t optimized tau = {tau.data}')
+            print(f"\t optimized tau = {tau.data}")
             # PI, _ = self._get_transportation_plan(
             #     grads=X, w=a-tau*b, w_target=w_bar, reg=reg, transport=transport
             # )
             if tau.grad is None:
                 raise Exception("Sorry, grads seem to be None")
             # Stop the loop when gradient is close to 0
-            if np.abs(tau.grad) < eps or tau >= tau_c.to('cpu') or tau <= 0:
+            if np.abs(tau.grad) < eps or tau >= tau_c.to("cpu") or tau <= 0:
                 break
 
         tau.data = tau.data.clamp(min=0, max=tau_c)
@@ -325,9 +325,16 @@ class OptimalTransportPruner(GradualPruner):
                     grads=X, w=w, w_target=w_bar, reg=reg, transport=transport
                 )
             else:
-                M = torch.cdist(torch.sort(X @ w_bar).values.reshape(n,1), torch.sort(X @ w).values.reshape(n,1), p=2)**2
-            
-            ot_dist = torch.sum(PI*M.to(PI.device))
+                M = (
+                    torch.cdist(
+                        torch.sort(X @ w_bar).values.reshape(n, 1),
+                        torch.sort(X @ w).values.reshape(n, 1),
+                        p=2,
+                    )
+                    ** 2
+                )
+
+            ot_dist = torch.sum(PI * M.to(PI.device))
             # print('\tScaled OT distance', ot_dist*n)
             # print('\tSq Euclidean distance', torch.linalg.norm(y - X @ w)**2)
             Q = (1 / 2) * ot_dist + (n / 2) * lam_torch * torch.linalg.norm(
@@ -338,18 +345,22 @@ class OptimalTransportPruner(GradualPruner):
 
     def _get_transportation_cost(self, grads, w, w_target):
         original_distr = grads @ w_target
-        embedded_distr = grads @ w  
+        embedded_distr = grads @ w
 
         n = grads.shape[0]
 
         original_distr = original_distr.detach().cpu().numpy()
-        embedded_distr = embedded_distr.detach().cpu().numpy() 
+        embedded_distr = embedded_distr.detach().cpu().numpy()
 
         original_distr = np.sort(original_distr)
         embedded_distr = np.sort(embedded_distr)
 
         # Compute the cost matrix (squared Euclidean distance) between original_distr and embedded_distr
-        M = ot.dist(original_distr.reshape(n, 1), embedded_distr.reshape(n, 1), metric="sqeuclidean")
+        M = ot.dist(
+            original_distr.reshape(n, 1),
+            embedded_distr.reshape(n, 1),
+            metric="sqeuclidean",
+        )
 
         return M
 
@@ -388,95 +399,96 @@ class OptimalTransportPruner(GradualPruner):
         device,
         num_workers,
         module_param_indices_list,
-        iter_num,
+        sparsity,
     ):
         n = len(grads)
         params_num = grads.shape[1]
-        init_sparsity = 0
-        sparsity_levels = np.arange(
-            init_sparsity,
-            self._target_sparsity + 1e-10,
-            1 / iter_num * (self._target_sparsity - init_sparsity),
-        )[1:]
-        # sparsity_levels = [self._target_sparsity for i in range(iter_num)]
         lam_torch = torch.tensor(lam, device=device)
         n_torch = torch.tensor(n, device=device)
-        PI = torch.eye(n) * (1/n)
-        PI_norm = torch.linalg.norm(PI, ord=2)
+        PI = torch.eye(n) * (1 / n)
         PI = PI.to(device)
         w, _ = self._get_weights()
         w_bar = copy(target_weights)
         w = w.to(device)
         w_bar = w_bar.to(device)
-        Q_old = torch.inf
-        for i, sparsity in enumerate(sparsity_levels):
-            print(f"Iteration {i}:")
-            print(f'\t reg={reg}')
-            non_zero_params_num = int(params_num * (1 - sparsity))
-            grads, _, _, _ = self._compute_wgH(
-                dset, subset_inds, device, num_workers, debug=False
-            )
 
-            X = grads.to(device)
-            y = X @ w_bar
-            X_norm = torch.linalg.norm(X, ord=2)
+        print(f"\t reg={reg}")
+        non_zero_params_num = int(params_num * (1 - sparsity))
+        grads, _, _, _ = self._compute_wgH(
+            dset, subset_inds, device, num_workers, debug=False
+        )
 
-            print("\t w", w)
-            print("\t w_bar", w_bar)
+        X = grads.to(device)
+        y = X @ w_bar
 
-            Q, PI, M = self._pruning_objective(
+        print("\t w", w)
+        print("\t w_bar", w_bar)
+
+        Q, PI, M = self._pruning_objective(
+            X=X,
+            y=y,
+            w=w,
+            w_bar=w_bar,
+            lam=lam,
+            reg=reg,
+            transport=transport,
+        )
+        print(f"\t Objective function value: {Q}")
+
+        if not transport:
+            print("\t Perform no transport update")
+            delta_Qw = X.T @ (X @ w - y) + n_torch * lam_torch * (w - w_bar)
+            tau_c = self.__find_tau_c(a=w, b=delta_Qw, k=non_zero_params_num)
+        else:
+            print("\t Perform optimal transport update")
+            delta_Qw = X.T @ PI @ (X @ w - y) + lam_torch * (w - w_bar)
+            tau_c = self.__find_tau_c(a=w, b=delta_Qw, k=non_zero_params_num)
+        print(f"\t tau_c = {tau_c}")
+
+        tau_m = self.__find_minimizing_tau(
+            a=w,
+            b=delta_Qw,
+            tau_c=tau_c,
+            k=non_zero_params_num,
+            X=X,
+            y=y,
+            w_bar=w_bar,
+            lam=lam,
+            reg=reg,
+            transport=transport,
+            PI=PI,
+        )
+        print(f"\t tau_m = {tau_m}")
+        if tau_m < tau_c.to("cpu"):
+            tau = tau_m
+        else:
+            print("\t tau_m >= tau_c, and we optimize tau with gamma")
+            gamma = 1.05
+            tau = tau_c
+            Q_best, _, _ = self._pruning_objective(
                 X=X,
                 y=y,
-                w=w,
+                w=w - tau * delta_Qw,
                 w_bar=w_bar,
                 lam=lam,
                 reg=reg,
                 transport=transport,
+                PI=PI,
             )
-            print(f"\t Objective function value: {Q}")
-
-            if not transport:
-                print("\t Perform no transport update")
-                delta_Qw = X.T @ (X @ w - y) + n_torch * lam_torch * (w - w_bar)
-                tau_c = self.__find_tau_c(a=w, b=delta_Qw, k=non_zero_params_num)
-                # np.savetxt(f"logs/X_{i+1}.csv", (X.T).cpu(), delimiter=",")
-            else:
-                print("\t Perform optimal transport update")
-                delta_Qw = X.T @ PI @ (X @ w - y) + lam_torch * (w - w_bar)
-                tau_c = self.__find_tau_c(a=w, b=delta_Qw, k=non_zero_params_num)
-                # np.savetxt(f"logs/X_PI{i+1}.csv", (X.T @ PI).cpu(), delimiter=",")
-            print(f'\t tau_c = {tau_c}')
-
-            tau_m = self.__find_minimizing_tau(
-                a=w,
-                b=delta_Qw,
-                tau_c=tau_c,
-                k=non_zero_params_num,
+            Q_gamma_tau, _, _ = self._pruning_objective(
                 X=X,
                 y=y,
+                w=w - gamma * tau * delta_Qw,
                 w_bar=w_bar,
                 lam=lam,
                 reg=reg,
                 transport=transport,
-                PI = PI,
+                PI=PI,
             )
-            print(f'\t tau_m = {tau_m}')
-            if tau_m < tau_c.to('cpu'):
-                tau = tau_m
-            else:
-                print('\t tau_m >= tau_c, and we optimize tau with gamma')
-                gamma = 1.05
-                tau = tau_c
-                Q_best, _, _ = self._pruning_objective(
-                    X=X,
-                    y=y,
-                    w=w - tau * delta_Qw,
-                    w_bar=w_bar,
-                    lam=lam,
-                    reg=reg,
-                    transport=transport,
-                    PI = PI,
-                )
+            Q_gamma_tau = -torch.inf
+            while Q_best > Q_gamma_tau:
+                Q_best = Q_gamma_tau
+                tau = gamma * tau
                 Q_gamma_tau, _, _ = self._pruning_objective(
                     X=X,
                     y=y,
@@ -485,47 +497,27 @@ class OptimalTransportPruner(GradualPruner):
                     lam=lam,
                     reg=reg,
                     transport=transport,
-                    PI = PI,
+                    PI=PI,
                 )
-                Q_gamma_tau = -torch.inf
-                while Q_best > Q_gamma_tau:
-                    Q_best = Q_gamma_tau
-                    tau = gamma * tau
-                    Q_gamma_tau, _, _ = self._pruning_objective(
-                        X=X,
-                        y=y,
-                        w=w - gamma * tau * delta_Qw,
-                        w_bar=w_bar,
-                        lam=lam,
-                        reg=reg,
-                        transport=transport,
-                        PI = PI,
-                    )
-                    print(f'\t tau={tau} with gamma={gamma}')
-            print(f"\t tau = {tau}")
+                print(f"\t tau={tau} with gamma={gamma}")
+        print(f"\t tau = {tau}")
 
-            tau = tau.to(w.device)
-            w_new = w - tau * delta_Qw
-            # w_bar = copy(w)
-            w_old = copy(w)
+        tau = tau.to(w.device)
+        w_new = w - tau * delta_Qw
 
-            print(f"\t Non-zero value num of w_{i}:", (w != 0).sum())
-            w = self._hard_threshold(w_new, non_zero_params_num)
-            print(f"\t Non-zero value num of w_{i+1}", (w != 0).sum())
+        print(f"\t Non-zero value num of w_{i}:", (w != 0).sum())
+        w = self._hard_threshold(w_new, non_zero_params_num)
+        print(f"\t Non-zero value num of w_{i+1}", (w != 0).sum())
+        print("\t Model weights updated")
 
-            self._set_weights(
-                weight_updates=w, module_param_indices_list=module_param_indices_list, set_mask=False
-            )
-            print("\t Model weights updated")
-
+        self._set_weights(
+            weight_updates=w,
+            module_param_indices_list=module_param_indices_list,
+            set_mask=True,
+        )
         np.savetxt("X.csv", (X).detach().cpu().numpy(), delimiter=",")
         np.savetxt("w.csv", (w).detach().cpu().numpy(), delimiter=",")
         np.savetxt("w_bar.csv", (w_bar).detach().cpu().numpy(), delimiter=",")
-        self._set_weights(
-            weight_updates=w, module_param_indices_list=module_param_indices_list, set_mask=True
-        )
-
-
 
     def on_epoch_begin(
         self, dset, subset_inds, device, num_workers, epoch_num, **kwargs
@@ -576,6 +568,17 @@ class OptimalTransportPruner(GradualPruner):
         grads, _, _, _ = self._compute_wgH(
             dset, subset_inds, device, num_workers, debug=False
         )
+
+        pruning_stage = (epoch_num - self._start) // self._freq + 1
+        total_stages = (self._end - self.start) // self._freq + 1
+        print(f"PRUNING STAGE {pruning_stage}")
+        # sparsity = pruning_stage / total_stages * self._target_sparsity # linear increasing sparsity
+        sparsity = (
+            self._target_sparsity
+            + (self._initial_sparsity - self._target_sparsity)
+            * (1 - pruning_stage / total_stages) ** 3
+        )
+        print(f"Sparsity={sparsity}")
         self._get_weight_update(
             grads=grads,
             target_weights=self._target_weights,
@@ -587,7 +590,7 @@ class OptimalTransportPruner(GradualPruner):
             device=device,
             num_workers=num_workers,
             module_param_indices_list=module_param_indices_list,
-            iter_num=20,
+            sparsity=sparsity,
         )
 
         return True, meta
