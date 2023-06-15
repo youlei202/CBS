@@ -5,4 +5,9 @@ __pycache__
 prob_regressor_data
 prob_regressor_results
 .history
-logs/*
+logs
+*.pdf
+datasets
+*.csv
+*.pth
+*.png

@@ -15,21 +15,21 @@ FISHER_SUBSAMPLE_SIZES=(1000)
 PRUNERS=(optimal_transport)
 JOINTS=(1)
 FISHER_DAMP="1e-5"
-EPOCH_END="10"
+EPOCH_END="30"
 PROPER_FLAG="1"
 ROOT_DIR="/zhome/b2/8/197929/GitHub/CBS"
 DATA_DIR="/zhome/b2/8/197929/GitHub/CBS/datasets"
-SWEEP_NAME="exp_oct_21_resnet20_all_rep"
+SWEEP_NAME="exp_oct_21_resnet20_ot_baseline"
 NOWDATE=""
 DQT='"'
-GPUS=(2 3)
+GPUS=(0)
 LOG_DIR="${ROOT_DIR}/prob_regressor_results/${SWEEP_NAME}/log/"
 CSV_DIR="${ROOT_DIR}/prob_regressor_results/${SWEEP_NAME}/csv/"
 mkdir -p ${LOG_DIR}
 mkdir -p ${CSV_DIR}
 # ONE_SHOT="--one-shot"
 #CKP_PATH="${ROOT_DIR}/checkpoints/resnet20_cifar10.pth.tar"
-CKP_PATH="${ROOT_DIR}/../exp_root/exp_oct_21_resnet20_all_rep/20211026_18-55-28_694095_239/regular_checkpoint.ckpt"
+# CKP_PATH="${ROOT_DIR}/../exp_root/exp_oct_21_resnet20_all_rep/20211026_18-55-28_694095_239/regular_checkpoint.ckpt"
 
 # OPTIMAL_TRANSPORTATION="--ot"
 extra_cmd=" ${OPTIMAL_TRANSPORTATION}  "
@@ -71,7 +71,7 @@ do
                         do
 
 
-                            CUDA_VISIBLE_DEVICES=${GPUS[$((${ID} % ${#GPUS[@]}))]} python3 ${ROOT_DIR}/main.py --exp_name=${SWEEP_NAME}  --dset=cifar10 --dset_path=${DATA_DIR} --arch=resnet20 --config_path=${ROOT_DIR}/configs/resnet20_optimal_transport.yaml --workers=1 --batch_size=64 --logging_level debug --gpus=0 --from_checkpoint_path=${CKP_PATH} --batched-test --not-oldfashioned --disable-log-soft --use-model-config --sweep-id ${ID} --fisher-damp ${FISHER_DAMP} --prune-modules ${MODULE} --fisher-subsample-size ${FISHER_SUBSAMPLE_SIZE} --fisher-mini-bsz ${FISHER_MINIBSZ} --update-config --prune-class ${PRUNER} --target-sparsity ${TARGET_SPARSITY} --prune-end ${EPOCH_END} --prune-freq ${EPOCH_END} --result-file ${CSV_DIR}/prune_module-woodfisher-based_all_epoch_end-${EPOCH_END}.csv --seed ${SEED} --deterministic --full-subsample ${JOINT_FLAG} --fisher-optimized --fisher-parts 5 --offload-grads --offload-inv $extra_cmd 
+                            CUDA_VISIBLE_DEVICES=${GPUS[$((${ID} % ${#GPUS[@]}))]} python3 ${ROOT_DIR}/main.py --exp_name=${SWEEP_NAME}  --dset=cifar10 --dset_path=${DATA_DIR} --arch=resnet20 --config_path=${ROOT_DIR}/configs/resnet20_optimal_transport.yaml --workers=1 --batch_size=64 --logging_level debug --gpus=0 --from_checkpoint_path=${CKP_PATH} --batched-test --not-oldfashioned --disable-log-soft --use-model-config --sweep-id ${ID} --fisher-damp ${FISHER_DAMP} --prune-modules ${MODULE} --fisher-subsample-size ${FISHER_SUBSAMPLE_SIZE} --fisher-mini-bsz ${FISHER_MINIBSZ} --update-config --prune-class ${PRUNER} --target-sparsity ${TARGET_SPARSITY} --result-file ${CSV_DIR}/prune_module-woodfisher-based_all_epoch_end-${EPOCH_END}.csv --seed ${SEED} --deterministic --full-subsample ${JOINT_FLAG} --epochs ${EPOCH_END} --fisher-optimized --fisher-parts 5 --offload-grads --offload-inv $extra_cmd 
                             #CUDA_VISIBLE_DEVICES=${GPUS[$((${ID} % ${#GPUS[@]}))]} python3 ${ROOT_DIR}/main.py --exp_name=${SWEEP_NAME}  --dset=cifar10 --dset_path=${DATA_DIR} --arch=resnet20 --config_path=${ROOT_DIR}/configs/resnet20_woodfisher.yaml --workers=1 --batch_size=64 --logging_level debug --gpus=0 --from_checkpoint_path=${CKP_PATH} --batched-test --not-oldfashioned --disable-log-soft --use-model-config --sweep-id ${ID} --fisher-damp ${FISHER_DAMP} --prune-modules ${MODULE} --fisher-subsample-size ${FISHER_SUBSAMPLE_SIZE} --fisher-mini-bsz ${FISHER_MINIBSZ} --update-config --prune-class ${PRUNER} --target-sparsity ${TARGET_SPARSITY} --prune-end ${EPOCH_END} --prune-freq ${EPOCH_END} --result-file ${CSV_DIR}/prune_module-woodfisher-based_all_epoch_end-${EPOCH_END}.csv --seed ${SEED} --deterministic --full-subsample ${JOINT_FLAG} --fisher-optimized --fisher-parts 5 --offload-grads --offload-inv $extra_cmd &> ${LOG_DIR}/${PRUNER}_proper-1_joint-${JOINT}_module-all_target_sp-${TARGET_SPARSITY}_epoch_end-${EPOCH_END}_samples-${FISHER_SUBSAMPLE_SIZE}_${FISHER_MINIBSZ}_damp-${FISHER_DAMP}_seed-${SEED}.txt
 
                             ID=$((ID+1))

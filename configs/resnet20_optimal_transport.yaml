@@ -1,7 +1,7 @@
 pruners:
   pruner_1:
     class: OptimalTransportPruner
-    epochs: [0,10,10]
+    epochs: [0,2,20]
     weight_only: True
     initial_sparsity: 0.0
     target_sparsity: 0.9
