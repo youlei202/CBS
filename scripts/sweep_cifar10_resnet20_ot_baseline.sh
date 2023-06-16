@@ -10,7 +10,7 @@ MODULES=("layer1.0.conv1_layer1.0.conv2_layer1.1.conv1_layer1.1.conv2_layer1.2.c
 
 #SEEDS=(0 1 2)
 SEEDS=(0)
-FISHER_SUBSAMPLE_SIZES=(1000)
+FISHER_SUBSAMPLE_SIZES=(80)
 #PRUNERS=(woodfisherblock globalmagni magni diagfisher)
 PRUNERS=(optimal_transport)
 JOINTS=(1)

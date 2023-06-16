@@ -114,7 +114,13 @@ class OptimalTransportPruner(GradualPruner):
         optim.SGD(self._model.parameters(), lr=1e-10).zero_grad()
 
     def _compute_wgH(self, dset, subset_inds, device, num_workers, debug=False):
+        backup_masks = []
+        for idx, module in enumerate(self._modules):
+            backup_masks.append(module.weight_mask)
+            module.weight_mask = torch.ones_like(module.weight_mask)
+
         st_time = time.perf_counter()
+
         self._model = self._model.to(device)
 
         print("in optimal transport pruning: len of subset_inds is ", len(subset_inds))
@@ -169,7 +175,7 @@ class OptimalTransportPruner(GradualPruner):
         for in_tensor, target in dummy_loader:
             self._release_grads()
 
-            in_tensor = add_noise(in_tensor)
+            # in_tensor = add_noise(in_tensor)
             target = randomize_labels(target)
 
             in_tensor, target = in_tensor.to(device), target.to(device)
@@ -216,6 +222,11 @@ class OptimalTransportPruner(GradualPruner):
                 str(end_time - st_time)
             )
         )
+        for idx, module in enumerate(self._modules):
+            module.weight_mask = backup_masks[idx]
+
+        if self.args.ot:
+            grads = torch.rand(grads.shape[0],grads.shape[1]).to('cuda')
 
         # grads = torch.zeros_like(grads)
         return grads, GTWs, w, None
@@ -233,7 +244,9 @@ class OptimalTransportPruner(GradualPruner):
         """Find the largest tau such that the support of a-tau*b is the same as a"""
         low, high = 0, min(torch.max(a / (b + eps)), 100)
 
-        while high - low > eps:
+        count = 0
+        while (high - low > eps) and (count < 50):
+            count += 1
             # print(f'low={low}, high={high}')
             mid = (low + high) / 2
             if self.__same_support(a, a - mid * b, k):
@@ -309,6 +322,7 @@ class OptimalTransportPruner(GradualPruner):
             with torch.no_grad():
                 module.weight.data = module.weight.data * mask
 
+
     def _pruning_objective(self, X, y, w, w_bar, lam, reg, transport, PI=None):
         n = X.shape[0]
         w = w.to(X.device)
@@ -337,7 +351,7 @@ class OptimalTransportPruner(GradualPruner):
             ot_dist = torch.sum(PI * M.to(PI.device))
             # print('\tScaled OT distance', ot_dist*n)
             # print('\tSq Euclidean distance', torch.linalg.norm(y - X @ w)**2)
-            Q = (1 / 2) * ot_dist + (n / 2) * lam_torch * torch.linalg.norm(
+            Q = (n / 2) * ot_dist + (n / 2) * lam_torch * torch.linalg.norm(
                 w - w_bar
             ) ** 2
 
@@ -406,8 +420,6 @@ class OptimalTransportPruner(GradualPruner):
         params_num = grads.shape[1]
         lam_torch = torch.tensor(lam, device=device)
         n_torch = torch.tensor(n, device=device)
-        PI = torch.eye(n) * (1 / n)
-        PI = PI.to(device)
         w, _ = self._get_weights()
         w_bar = copy(target_weights)
         w = w.to(device)
@@ -439,10 +451,12 @@ class OptimalTransportPruner(GradualPruner):
         if not transport:
             print("\t Perform no transport update")
             delta_Qw = X.T @ (X @ w - y) + n_torch * lam_torch * (w - w_bar)
+            print(f'\t delta_Qw={delta_Qw}')
             tau_c = self.__find_tau_c(a=w, b=delta_Qw, k=non_zero_params_num)
         else:
             print("\t Perform optimal transport update")
-            delta_Qw = X.T @ PI @ (X @ w - y) + lam_torch * (w - w_bar)
+            delta_Qw = (X.T @ PI @ (X @ w - y) + lam_torch * (w - w_bar)) * n_torch
+            print(f'\t delta_Qw={delta_Qw}')
             tau_c = self.__find_tau_c(a=w, b=delta_Qw, k=non_zero_params_num)
         print(f"\t tau_c = {tau_c}")
 
@@ -504,11 +518,15 @@ class OptimalTransportPruner(GradualPruner):
 
         tau = tau.to(w.device)
         w_new = w - tau * delta_Qw
+        print(f'\t tau*delta_Qw = {delta_Qw}')
+        print(f'\t w_new = {w_new}')
 
         print(f"\t Non-zero value num of w_{pruning_stage}:", (w != 0).sum())
         self._target_weights = copy(w)
+
         w = self._hard_threshold(w_new, non_zero_params_num)
         print(f"\t Non-zero value num of w_{pruning_stage+1}", (w != 0).sum())
+
         print("\t Model weights updated")
 
         self._set_weights(
@@ -527,7 +545,7 @@ class OptimalTransportPruner(GradualPruner):
         if self._pruner_not_active(epoch_num):
             print("Pruner is not ACTIVEEEE yaa!")
             if OptimalTransportPruner.have_not_started_pruning:
-                self._target_weights, _ = self._get_weights()
+                self._target_weights, self._original_mask = self._get_weights()
                 print("Target weights updated")
             return False, {}
 
@@ -573,20 +591,20 @@ class OptimalTransportPruner(GradualPruner):
         pruning_stage = (epoch_num - self._start) // self._freq 
         total_stages = (self._end - self._start) // self._freq 
         print(f"PRUNING STAGE {pruning_stage}")
-        # sparsity = pruning_stage / total_stages * self._target_sparsity # linear increasing sparsity
-        sparsity = (
-            self._target_sparsity
-            + (self._initial_sparsity - self._target_sparsity)
-            * (1 - pruning_stage / total_stages) ** 3
-        ) # cubic increasing sparsity
+        sparsity = pruning_stage / total_stages * self._target_sparsity # linear increasing sparsity
+        # sparsity = (
+        #     self._target_sparsity
+        #     + (self._initial_sparsity - self._target_sparsity)
+        #     * (1 - pruning_stage / total_stages) ** 3
+        # ) # cubic increasing sparsity
         
         print(f"Sparsity={sparsity}")
         self._get_weight_update(
             grads=grads,
             target_weights=self._target_weights,
-            lam=1,
+            lam=0,
             transport=self.args.ot,
-            reg=5,
+            reg=10,
             dset=dset,
             subset_inds=subset_inds,
             device=device,
