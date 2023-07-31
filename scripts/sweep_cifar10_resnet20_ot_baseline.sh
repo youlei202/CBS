@@ -5,17 +5,17 @@
 #!/bin/bash
 
 #TARGET_SPARSITYS=(0.2 0.4 0.6 0.7 0.8 0.9 0.1 0.3 0.5 0.98)
-TARGET_SPARSITYS=(0.7)
+TARGET_SPARSITYS=(0.9)
 MODULES=("layer1.0.conv1_layer1.0.conv2_layer1.1.conv1_layer1.1.conv2_layer1.2.conv1_layer1.2.conv2_layer2.0.conv1_layer2.0.conv2_layer2.1.conv1_layer2.1.conv2_layer2.2.conv1_layer2.2.conv2_layer3.0.conv1_layer3.0.conv2_layer3.1.conv1_layer3.1.conv2_layer3.2.conv1_layer3.2.conv2")
 
 #SEEDS=(0 1 2)
 SEEDS=(0)
-FISHER_SUBSAMPLE_SIZES=(80)
+FISHER_SUBSAMPLE_SIZES=(1000)
 #PRUNERS=(woodfisherblock globalmagni magni diagfisher)
 PRUNERS=(optimal_transport)
 JOINTS=(1)
 FISHER_DAMP="1e-5"
-EPOCH_END="30"
+EPOCH_END="24"
 PROPER_FLAG="1"
 ROOT_DIR="/zhome/b2/8/197929/GitHub/CBS"
 DATA_DIR="/zhome/b2/8/197929/GitHub/CBS/datasets"

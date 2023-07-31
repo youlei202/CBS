@@ -231,7 +231,7 @@ class OptimalTransportPruner(GradualPruner):
         #     print('Zero grads')
         #     grads = torch.zeros_like(grads).to('cuda')
 
-        grads = add_noise_to_grads(grads=grads, noise_std_dev=0.5*grads.std(), prop=1.0)
+        grads = add_noise_to_grads(grads=grads, noise_std_dev=1.0*grads.std(), prop=0.3)
         # grads = (torch.ones_like(grads) * grads.mean()).to('cuda') 
 
         return grads, GTWs, w, None
@@ -292,10 +292,8 @@ class OptimalTransportPruner(GradualPruner):
             loss.backward()
             optimizer.step()
 
-            print(f"\t optimized tau = {tau.data}")
-            # PI, _ = self._get_transportation_plan(
-            #     grads=X, w=a-tau*b, w_target=w_bar, reg=reg, transport=transport
-            # )
+            # print(f"\t optimized tau = {tau.data}")
+
             if tau.grad is None:
                 raise Exception("Sorry, grads seem to be None")
             # Stop the loop when gradient is close to 0
@@ -346,16 +344,15 @@ class OptimalTransportPruner(GradualPruner):
             else:
                 M = (
                     torch.cdist(
-                        torch.sort(X @ w_bar).values.reshape(n, 1),
-                        torch.sort(X @ w).values.reshape(n, 1),
+                        (X @ w_bar).reshape(n, 1),
+                        (X @ w).reshape(n, 1),
                         p=2,
                     )
                     ** 2
                 )
-
             ot_dist = torch.sum(PI * M.to(PI.device))
             # print('\tScaled OT distance', ot_dist*n)
-            # print('\tSq Euclidean distance', torch.linalg.norm(y - X @ w)**2)
+            # print('\tSq Euclidean distance', torch.linalg.norm(X @ w_bar - X @ w)**2)
             Q = (n / 2) * ot_dist + (n / 2) * lam_torch * torch.linalg.norm(
                 w - w_bar
             ) ** 2
@@ -371,8 +368,8 @@ class OptimalTransportPruner(GradualPruner):
         original_distr = original_distr.detach().cpu().numpy()
         embedded_distr = embedded_distr.detach().cpu().numpy()
 
-        original_distr = np.sort(original_distr)
-        embedded_distr = np.sort(embedded_distr)
+        original_distr = (original_distr)
+        embedded_distr = (embedded_distr)
 
         # Compute the cost matrix (squared Euclidean distance) between original_distr and embedded_distr
         M = ot.dist(
@@ -394,6 +391,7 @@ class OptimalTransportPruner(GradualPruner):
         original_distr_mass = [1 / n for i in range(n)]
         embedded_distr_mass = [1 / n for i in range(n)]
 
+        # PI = np.eye(n) / n
         # PI = ot.emd(original_distr_mass, embedded_distr_mass, M)
         PI = ot.bregman.sinkhorn(
             original_distr_mass, embedded_distr_mass, M, reg=reg, numItermax=5000
@@ -458,8 +456,17 @@ class OptimalTransportPruner(GradualPruner):
         else:
             print("\t Perform optimal transport update")
             delta_Qw = (X.T @ PI @ (X @ w - y) + lam_torch * (w - w_bar)) * n_torch
+
+            # delta_Qw_part_1 = torch.zeros_like(w.reshape(len(w),1))
+            # delta_Qw_part_2 = lam_torch * (w - w_bar)
+            # for i in range(n):
+            #     inner_sum = PI[i, :].unsqueeze(0) @ (X[i, :].unsqueeze(0) * w.reshape(len(w),1).T - X * w_bar.reshape(len(w_bar),1).T)
+            #     delta_Qw_part_1 += (X[i, :].unsqueeze(1) * inner_sum.T)
+            # delta_Qw_part_1 = delta_Qw_part_1.reshape(-1)
+            # delta_Qw = (delta_Qw_part_1 + delta_Qw_part_2) 
             print(f"\t delta_Qw={delta_Qw}")
             tau_c = self.__find_tau_c(a=w, b=delta_Qw, k=non_zero_params_num)
+
         print(f"\t tau_c = {tau_c}")
 
         tau_m = self.__find_minimizing_tau(
@@ -515,7 +522,7 @@ class OptimalTransportPruner(GradualPruner):
                     transport=transport,
                     PI=PI,
                 )
-                print(f"\t tau={tau} with gamma={gamma}")
+                # print(f"\t tau={tau} with gamma={gamma}")
         print(f"\t tau = {tau}")
 
         tau = tau.to(w.device)
@@ -538,13 +545,21 @@ class OptimalTransportPruner(GradualPruner):
             module_param_indices_list=module_param_indices_list,
             set_mask=True,
         )
-        np.savetxt("X.csv", (X).detach().cpu().numpy(), delimiter=",")
-        np.savetxt("w.csv", (w).detach().cpu().numpy(), delimiter=",")
-        np.savetxt("w_bar.csv", (w_bar).detach().cpu().numpy(), delimiter=",")
-        np.savetxt("PI.csv", PI.detach().cpu().numpy(), delimiter=",")
-        # plt.imshow(PI)
-        # plt.savefig("transportation_plan.png", format="png")
-        # np.savetxt("M.csv", M, delimiter=",")
+
+        if self.args.ot:
+            np.savetxt("X.csv", (X).detach().cpu().numpy(), delimiter=",")
+            np.savetxt("w.csv", (w).detach().cpu().numpy(), delimiter=",")
+            np.savetxt("w_bar.csv", (w_bar).detach().cpu().numpy(), delimiter=",")
+            np.savetxt("PI.csv", PI.detach().cpu().numpy(), delimiter=",")
+
+
+            _, indices_Xwbar = torch.sort(X @ w_bar)
+            _, indices_Xw = torch.sort(X @ w)
+            sorted_PI = PI[indices_Xwbar]
+            sorted_PI = sorted_PI[:, indices_Xw]
+            plt.imshow(sorted_PI.detach().cpu().numpy())
+            plt.savefig("transportation_plan.png", format="png")
+            # np.savetxt("M.csv", M, delimiter=",")
 
     def on_epoch_begin(
         self, dset, subset_inds, device, num_workers, epoch_num, **kwargs
@@ -603,16 +618,16 @@ class OptimalTransportPruner(GradualPruner):
         # sparsity = (
         #     self._target_sparsity
         #     + (self._initial_sparsity - self._target_sparsity)
-        #     * (1 - pruning_stage / total_stages) ** 3
+        #     * (1 - (pruning_stage-1) / (total_stages-1)) ** 3
         # ) # cubic increasing sparsity
 
         print(f"Sparsity={sparsity}")
         self._get_weight_update(
             grads=grads,
             target_weights=self._target_weights,
-            lam=1,
+            lam=0,
             transport=self.args.ot,
-            reg=1,
+            reg=1.0,
             dset=dset,
             subset_inds=subset_inds,
             device=device,
