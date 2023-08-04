@@ -12,7 +12,7 @@ import torch.nn.functional as F
 import time
 import logging
 
-from utils.utils import flatten_tensor_list, get_summary_stats, dump_tensor_to_mat
+from utils.utils import flatten_tensor_list, get_summary_stats, dump_tensor_to_mat, add_noise_to_grads
 from policies.pruners import GradualPruner
 from utils.plot import analyze_new_weights
 from common.io import _load, _dump
@@ -78,6 +78,8 @@ class OptimalTransportPruner(GradualPruner):
                     params.append(param)
 
         grads = torch.autograd.grad(ys, params)  # first order gradient
+        if self.args.add_noise:
+            grads = add_noise_to_grads(grads)
 
         # Do gradient_masking: mask out the parameters which have been pruned previously
         # to avoid rogue calculations for the hessian
@@ -158,35 +160,6 @@ class OptimalTransportPruner(GradualPruner):
 
         FF = 0.0
 
-        def add_noise(tensor, noise_factor=1):
-            tensor = tensor.float()  # Convert tensor to float
-            noise_factor = torch.tensor(noise_factor).to(tensor.device)
-            noise = torch.randn_like(tensor) * noise_factor
-            return tensor + noise
-            # return torch.zeros_like(tensor)
-
-        def randomize_labels(labels, fraction=0.5):
-            num_random_labels = int(fraction * len(labels))
-            random_indices = torch.randperm(len(labels))[:num_random_labels]
-            random_labels = torch.randint(low=0, high=10, size=(num_random_labels,))
-            labels[random_indices] = random_labels
-            return labels
-
-        def add_noise_to_grads(grads, noise_std_dev=1, prop=0.25):
-            # Randomly select two row indices
-            m = int(grads.size(0)*prop)
-            indices = torch.randperm(grads.size(0))[:m]
-            indices = indices.to(grads.device)
-
-            # Generate Gaussian noise to add
-            noise = torch.normal(0, noise_std_dev, size=(m, grads.size(1)))
-            noise = noise.to(grads.device)
-
-            # Add the noise to the randomly selected rows
-            grads[indices] += noise
-
-            return grads
-
         for in_tensor, target in dummy_loader:
             self._release_grads()
 
@@ -226,13 +199,6 @@ class OptimalTransportPruner(GradualPruner):
         )
         for idx, module in enumerate(self._modules):
             module.weight_mask = backup_masks[idx]
-
-        # if self.args.ot:
-        #     print('Zero grads')
-        #     grads = torch.zeros_like(grads).to('cuda')
-
-        grads = add_noise_to_grads(grads=grads, noise_std_dev=1.0*grads.std(), prop=0.3)
-        # grads = (torch.ones_like(grads) * grads.mean()).to('cuda') 
 
         return grads, GTWs, w, None
 
@@ -451,21 +417,12 @@ class OptimalTransportPruner(GradualPruner):
         if not transport:
             print("\t Perform no transport update")
             delta_Qw = X.T @ (X @ w - y) + n_torch * lam_torch * (w - w_bar)
-            print(f"\t delta_Qw={delta_Qw}")
-            tau_c = self.__find_tau_c(a=w, b=delta_Qw, k=non_zero_params_num)
         else:
             print("\t Perform optimal transport update")
-            delta_Qw = (X.T @ PI @ (X @ w - y) + lam_torch * (w - w_bar)) * n_torch
+            delta_Qw = (X.T @ (PI @ (X @ w - y)) + lam_torch * (w - w_bar)) * n_torch
 
-            # delta_Qw_part_1 = torch.zeros_like(w.reshape(len(w),1))
-            # delta_Qw_part_2 = lam_torch * (w - w_bar)
-            # for i in range(n):
-            #     inner_sum = PI[i, :].unsqueeze(0) @ (X[i, :].unsqueeze(0) * w.reshape(len(w),1).T - X * w_bar.reshape(len(w_bar),1).T)
-            #     delta_Qw_part_1 += (X[i, :].unsqueeze(1) * inner_sum.T)
-            # delta_Qw_part_1 = delta_Qw_part_1.reshape(-1)
-            # delta_Qw = (delta_Qw_part_1 + delta_Qw_part_2) 
-            print(f"\t delta_Qw={delta_Qw}")
-            tau_c = self.__find_tau_c(a=w, b=delta_Qw, k=non_zero_params_num)
+        print(f"\t delta_Qw={delta_Qw}")
+        tau_c = self.__find_tau_c(a=w, b=delta_Qw, k=non_zero_params_num)
 
         print(f"\t tau_c = {tau_c}")
 
@@ -547,10 +504,10 @@ class OptimalTransportPruner(GradualPruner):
         )
 
         if self.args.ot:
-            np.savetxt("X.csv", (X).detach().cpu().numpy(), delimiter=",")
-            np.savetxt("w.csv", (w).detach().cpu().numpy(), delimiter=",")
-            np.savetxt("w_bar.csv", (w_bar).detach().cpu().numpy(), delimiter=",")
-            np.savetxt("PI.csv", PI.detach().cpu().numpy(), delimiter=",")
+            # np.savetxt("X.csv", (X).detach().cpu().numpy(), delimiter=",")
+            # np.savetxt("w.csv", (w).detach().cpu().numpy(), delimiter=",")
+            # np.savetxt("w_bar.csv", (w_bar).detach().cpu().numpy(), delimiter=",")
+            # np.savetxt("PI.csv", PI.detach().cpu().numpy(), delimiter=",")
 
 
             _, indices_Xwbar = torch.sort(X @ w_bar)
@@ -612,14 +569,14 @@ class OptimalTransportPruner(GradualPruner):
         pruning_stage = (epoch_num - self._start) // self._freq
         total_stages = (self._end - self._start) // self._freq
         print(f"PRUNING STAGE {pruning_stage}")
-        sparsity = (
-            pruning_stage / total_stages * self._target_sparsity
-        )  # linear increasing sparsity
         # sparsity = (
-        #     self._target_sparsity
-        #     + (self._initial_sparsity - self._target_sparsity)
-        #     * (1 - (pruning_stage-1) / (total_stages-1)) ** 3
-        # ) # cubic increasing sparsity
+        #     pruning_stage / total_stages * self._target_sparsity
+        # )  # linear increasing sparsity
+        sparsity = (
+            self._target_sparsity
+            + (self._initial_sparsity - self._target_sparsity)
+            * (1 - (pruning_stage-1) / (total_stages-1)) ** 3
+        ) # cubic increasing sparsity
 
         print(f"Sparsity={sparsity}")
         self._get_weight_update(

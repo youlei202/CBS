@@ -3,9 +3,39 @@
 #######################
 
 #!/bin/bash
+### General options
+### –- specify queue --
+#BSUB -q gpuv100
+### -- set the job Name --
+#BSUB -J resnet20-ot-baseline
+### -- ask for number of cores (default: 1) --
+#BSUB -n 4
+### -- Select the resources: 1 gpu in exclusive process mode --
+#BSUB -gpu "num=1:mode=exclusive_process"
+### -- set walltime limit: hh:mm --  maximum 24 hours for GPU-queues right now
+#BSUB -W 4:00
+# request system-memory
+#BSUB -R "rusage[mem=10GB]"
+### -- set the email address --
+# please uncomment the following line and put in your e-mail address,
+# if you want to receive e-mail notifications on a non-default address
+##BSUB -u leiyo@dtu.dk
+### -- send notification at start --
+#BSUB -B
+### -- send notification at completion--
+#BSUB -N
+### -- Specify the output and error file. %J is the job-id --
+### -- -o and -e mean append, -oo and -eo mean overwrite --
+#BSUB -o logs/gpu_resnet20_ot_baseline.out
+#BSUB -e logs/gpu_resnet20_ot_baseline.err
+# -- end of LSF options --
+
+nvidia-smi
+# Load the cuda module
+module load cuda/11.6
 
 #TARGET_SPARSITYS=(0.2 0.4 0.6 0.7 0.8 0.9 0.1 0.3 0.5 0.98)
-TARGET_SPARSITYS=(0.9)
+TARGET_SPARSITYS=(0.98 0.7 0.6)
 MODULES=("layer1.0.conv1_layer1.0.conv2_layer1.1.conv1_layer1.1.conv2_layer1.2.conv1_layer1.2.conv2_layer2.0.conv1_layer2.0.conv2_layer2.1.conv1_layer2.1.conv2_layer2.2.conv1_layer2.2.conv2_layer3.0.conv1_layer3.0.conv2_layer3.1.conv1_layer3.1.conv2_layer3.2.conv1_layer3.2.conv2")
 
 #SEEDS=(0 1 2)
@@ -15,7 +45,7 @@ FISHER_SUBSAMPLE_SIZES=(1000)
 PRUNERS=(optimal_transport)
 JOINTS=(1)
 FISHER_DAMP="1e-5"
-EPOCH_END="24"
+EPOCH_END="15"
 PROPER_FLAG="1"
 ROOT_DIR="/zhome/b2/8/197929/GitHub/CBS"
 DATA_DIR="/zhome/b2/8/197929/GitHub/CBS/datasets"
@@ -28,11 +58,12 @@ CSV_DIR="${ROOT_DIR}/prob_regressor_results/${SWEEP_NAME}/csv/"
 mkdir -p ${LOG_DIR}
 mkdir -p ${CSV_DIR}
 # ONE_SHOT="--one-shot"
-#CKP_PATH="${ROOT_DIR}/checkpoints/resnet20_cifar10.pth.tar"
+CKP_PATH="${ROOT_DIR}/checkpoints/resnet20.ckpt"
 # CKP_PATH="${ROOT_DIR}/../exp_root/exp_oct_21_resnet20_all_rep/20211026_18-55-28_694095_239/regular_checkpoint.ckpt"
 
 # OPTIMAL_TRANSPORTATION="--ot"
-extra_cmd=" ${OPTIMAL_TRANSPORTATION}  "
+# ADD_NOISE="--add-noise"
+extra_cmd=" ${OPTIMAL_TRANSPORTATION}  ${ADD_NOISE} "
 
 ID=0
 
@@ -54,7 +85,7 @@ do
                 do
                     for FISHER_SUBSAMPLE_SIZE in "${FISHER_SUBSAMPLE_SIZES[@]}"
                     do
-                        if [ "${FISHER_SUBSAMPLE_SIZE}" = 80 ]; then
+                        if [ "${FISHER_SUBSAMPLE_SIZE}" = 50 ]; then
                             FISHER_MINIBSZS=(1)
                         elif [ "${FISHER_SUBSAMPLE_SIZE}" = 1000 ]; then
                             #FISHER_MINIBSZS=(1 50)

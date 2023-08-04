@@ -5,9 +5,9 @@ echo $EXP_NAME
 ARCH=mlpnet
 DATASET=mnist
 
-SPARSITY=$1
-SEED=$2
-GPU=$3
+SPARSITY=0.7
+SEED=0
+GPU=(0 1)
 
 if [ "$#" -eq 4 ] && [ $4 != test ]; then
     NOWDATE=$4
@@ -29,11 +29,10 @@ MODEL=mlpnet
 DATA_PATH=../datasets/
 CONFIG_PATH=./configs/mlpnet_mnist_config_optimal_transport.yaml
 PRUNER=optimal_transport
-EPOCHS=10
+EPOCHS=14
 FISHER_SUBSAMPLE_SIZE=1000
 FISHER_MINI_BSZ=1
-# LOAD_FROM="./checkpoints/mnist_25_epoch_93.97.ckpt"
-LOAD_FROM=None
+LOAD_FROM="./checkpoints/mnist_25_epoch_93.97.ckpt"
 BSZ=64
 
 MODULE=fc1_fc2_fc3

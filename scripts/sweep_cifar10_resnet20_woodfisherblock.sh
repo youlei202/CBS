@@ -8,9 +8,9 @@ script_name=`basename "$0"`
 EXP_NAME="${script_name%.*}"
 echo $EXP_NAME
 
-SPARSITY=$1
-SEED=$2
-GPU=$3
+SPARSITY=0.95
+SEED=0
+GPU=1
 FLAG_GPUS="--gpus=0"
 #FLAG_GPUS="--cpu"
 
@@ -49,14 +49,14 @@ FISHER_SUBSAMPLE_SIZE=1000
 PRUNER=woodfisherblock
 JOINT=1
 FISHER_DAMP="1e-5"
-EPOCH_END="2"
+EPOCH_END="14"
 PROPER_FLAG="1"
 DQT='"'
 JOINT_FLAG="--woodburry-joint-sparsify"
-CKP_PATH="${ROOT_DIR}/checkpoints/resnet20_cifar10.20211026_18-55-28_694095_239.regular_checkpoint.ckpt"
-ONE_SHOT="--one-shot"
+CKP_PATH="${ROOT_DIR}/checkpoints/resnet20.ckpt"
+# ONE_SHOT="--one-shot"
 
-extra_cmd=" $ONE_SHOT "
+# extra_cmd=" $ONE_SHOT "
 
 ID=0
 
@@ -93,7 +93,7 @@ cfg_args="
 "
                             
 if [ "$is_test" -eq 0 ] ; then
-    CUDA_VISIBLE_DEVICES=${GPU}  python ${ROOT_DIR}/main.py $args $cfg_args > ${LOG_PATH} 2>&1 
+    CUDA_VISIBLE_DEVICES=${GPU}  python3 ${ROOT_DIR}/main.py $args $cfg_args > ${LOG_PATH} 2>&1 
 else
-    CUDA_VISIBLE_DEVICES=${GPU}  python ${ROOT_DIR}/main.py $args $cfg_args 
+    CUDA_VISIBLE_DEVICES=${GPU}  python3 ${ROOT_DIR}/main.py $args $cfg_args 
 fi

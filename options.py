@@ -884,5 +884,10 @@ def get_parser():
         action="store_true",
         help="Enable optimal transportation!",
     )
+    parser.add_argument(
+        "--add-noise",
+        action="store_true",
+        help="add noise to pruning"
+    )
 
     return parser.parse_args()
