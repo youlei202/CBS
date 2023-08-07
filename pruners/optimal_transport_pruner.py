@@ -79,7 +79,8 @@ class OptimalTransportPruner(GradualPruner):
 
         grads = torch.autograd.grad(ys, params)  # first order gradient
         if self.args.add_noise:
-            grads = add_noise_to_grads(grads)
+            noise_values = self.args.add_noise
+            grads = add_noise_to_grads(grads, noise_std_scale=noise_values[0], prop=noise_values[1])
 
         # Do gradient_masking: mask out the parameters which have been pruned previously
         # to avoid rogue calculations for the hessian
@@ -522,7 +523,7 @@ class OptimalTransportPruner(GradualPruner):
         self, dset, subset_inds, device, num_workers, epoch_num, **kwargs
     ):
         meta = {}
-        if self._pruner_not_active(epoch_num):
+        if self._pruner_not_active(epoch_num) or self._end==1:
             print("Pruner is not ACTIVEEEE yaa!")
             self._target_weights, self._original_mask = self._get_weights()
             return False, {}
@@ -569,14 +570,21 @@ class OptimalTransportPruner(GradualPruner):
         pruning_stage = (epoch_num - self._start) // self._freq
         total_stages = (self._end - self._start) // self._freq
         print(f"PRUNING STAGE {pruning_stage}")
-        # sparsity = (
-        #     pruning_stage / total_stages * self._target_sparsity
-        # )  # linear increasing sparsity
+
+        # linear increasing sparsity
         sparsity = (
-            self._target_sparsity
-            + (self._initial_sparsity - self._target_sparsity)
-            * (1 - (pruning_stage-1) / (total_stages-1)) ** 3
-        ) # cubic increasing sparsity
+            pruning_stage / total_stages * self._target_sparsity
+        )  
+
+        # exponential increasing sparsity
+        # if total_stages > 1:
+        #     sparsity = (
+        #         self._target_sparsity
+        #         + (self._initial_sparsity - self._target_sparsity)
+        #         * (1 - (pruning_stage-1) / (total_stages-1)) ** 3
+        #     ) # cubic increasing sparsity
+        # else:
+        #     sparsity = self._target_sparsity
 
         print(f"Sparsity={sparsity}")
         self._get_weight_update(
