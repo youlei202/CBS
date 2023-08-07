@@ -886,8 +886,9 @@ def get_parser():
     )
     parser.add_argument(
         "--add-noise",
-        action="store_true",
+        nargs=2,
+        type=float,
         help="add noise to pruning"
-    )
+    ) # --add-noise 0.1 0.2
 
     return parser.parse_args()
