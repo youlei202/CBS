@@ -358,7 +358,7 @@ def add_outer_products_efficient_v1(mat, vec, num_parts=2):
 
 #     return grads
 
-def add_noise_to_grads(grads, noise_std_scale=1, prop=0.25):
+def add_noise_to_grads(grads, noise_std_scale=2, prop=0.1):
     if isinstance(grads, tuple):
         # Save the original shapes for later
         original_shapes = [g.shape for g in grads]
