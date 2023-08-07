@@ -5,7 +5,7 @@
 #!/bin/bash
 ### General options
 ### –- specify queue --
-#BSUB -q gpuv100
+#BSUB -q gpua100
 ### -- set the job Name --
 #BSUB -J resnet20-ot
 ### -- ask for number of cores (default: 1) --
@@ -26,33 +26,36 @@
 #BSUB -N
 ### -- Specify the output and error file. %J is the job-id --
 ### -- -o and -e mean append, -oo and -eo mean overwrite --
-#BSUB -o logs/gpu_resnet20_ot.out
-#BSUB -e logs/gpu_resnet20_ot.err
+#BSUB -o logs/resnet20/many_seeds/many_seeds_std=4_prop=0.25/gpu_resnet20_ot.out
+#BSUB -e logs/resnet20/many_seeds/many_seeds_std=4_prop=0.25/gpu_resnet20_ot.err
 # -- end of LSF options --
 
 nvidia-smi
 # Load the cuda module
 module load cuda/11.6
 
+NOISE_STD=4
+NOISE_PROP=0.25
+
 #TARGET_SPARSITYS=(0.2 0.4 0.6 0.7 0.8 0.9 0.1 0.3 0.5 0.98)
-TARGET_SPARSITYS=(0.98 0.7 0.6)
+TARGET_SPARSITYS=(0.95)
 MODULES=("layer1.0.conv1_layer1.0.conv2_layer1.1.conv1_layer1.1.conv2_layer1.2.conv1_layer1.2.conv2_layer2.0.conv1_layer2.0.conv2_layer2.1.conv1_layer2.1.conv2_layer2.2.conv1_layer2.2.conv2_layer3.0.conv1_layer3.0.conv2_layer3.1.conv1_layer3.1.conv2_layer3.2.conv1_layer3.2.conv2")
 
-#SEEDS=(0 1 2)
-SEEDS=(0)
-FISHER_SUBSAMPLE_SIZES=(1000)
+SEEDS=(0 1 2 3 4)
+# SEEDS=(0)
+FISHER_SUBSAMPLE_SIZES=(100)
 #PRUNERS=(woodfisherblock globalmagni magni diagfisher)
 PRUNERS=(optimal_transport)
 JOINTS=(1)
-FISHER_DAMP="1e-5"
-EPOCH_END="15"
+FISHER_DAMP="1e-10"
+EPOCH_END="10"
 PROPER_FLAG="1"
 ROOT_DIR="/zhome/b2/8/197929/GitHub/CBS"
 DATA_DIR="/zhome/b2/8/197929/GitHub/CBS/datasets"
 SWEEP_NAME="exp_oct_21_resnet20_ot"
 NOWDATE=""
 DQT='"'
-GPUS=(1)
+GPUS=(0)
 LOG_DIR="${ROOT_DIR}/prob_regressor_results/${SWEEP_NAME}/log/"
 CSV_DIR="${ROOT_DIR}/prob_regressor_results/${SWEEP_NAME}/csv/"
 mkdir -p ${LOG_DIR}
@@ -62,8 +65,8 @@ CKP_PATH="${ROOT_DIR}/checkpoints/resnet20.ckpt"
 # CKP_PATH="${ROOT_DIR}/../exp_root/exp_oct_21_resnet20_all_rep/20211026_18-55-28_694095_239/regular_checkpoint.ckpt"
 
 OPTIMAL_TRANSPORTATION="--ot"
-# ADD_NOISE="--add-noise"
-extra_cmd=" ${OPTIMAL_TRANSPORTATION}  ${ADD_NOISE} "
+ADD_NOISE="--add-noise ${NOISE_STD} ${NOISE_PROP}"
+extra_cmd=" ${ONE_SHOT} ${OPTIMAL_TRANSPORTATION}  ${ADD_NOISE} "
 
 ID=0
 
@@ -85,7 +88,7 @@ do
                 do
                     for FISHER_SUBSAMPLE_SIZE in "${FISHER_SUBSAMPLE_SIZES[@]}"
                     do
-                        if [ "${FISHER_SUBSAMPLE_SIZE}" = 50 ]; then
+                        if [ "${FISHER_SUBSAMPLE_SIZE}" = 100 ]; then
                             FISHER_MINIBSZS=(1)
                         elif [ "${FISHER_SUBSAMPLE_SIZE}" = 1000 ]; then
                             #FISHER_MINIBSZS=(1 50)
