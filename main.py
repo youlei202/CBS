@@ -51,6 +51,8 @@ def setup_logging(args):
 
 if __name__ == "__main__":
     args = get_parser()
+    # args.from_checkpoint_path = None
+    # args.one_shot = False
     args = setup_logging(args)
     manager = Manager(args)
     manager.run()

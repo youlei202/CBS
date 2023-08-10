@@ -8,9 +8,11 @@ script_name=`basename "$0"`
 EXP_NAME="${script_name%.*}"
 echo $EXP_NAME
 
+MODE=test
+
 # if NOWDATE is passed by args, use it; otherwise tag this exp as a test 
-if [ "$#" -eq 7 ] && [ $7 != test ]; then
-    NOWDATE=$7
+if [ "$#" -eq 7 ] && [ ${MODE} != test ]; then
+    NOWDATE=${MODE}
     is_test=0
 else
     NOWDATE="test.$(date +%Y%m%d.%H_%M_%S)"
@@ -39,24 +41,24 @@ NOWDATE="train_loss_all_samples.${NOWDATE}"
 MODULE="layer1.0.conv1_layer1.0.conv2_layer1.1.conv1_layer1.1.conv2_layer1.2.conv1_layer1.2.conv2_layer2.0.conv1_layer2.0.conv2_layer2.1.conv1_layer2.1.conv2_layer2.2.conv1_layer2.2.conv2_layer3.0.conv1_layer3.0.conv2_layer3.1.conv1_layer3.1.conv2_layer3.2.conv1_layer3.2.conv2"
 
 ID=0
-SEED=$5
+SEED=0
 
 FISHER_SUBSAMPLE_SIZE=1000
 FISHER_MINI_BSZ=1
 #PRUNERS=(woodfisherblock globalmagni magni diagfisher)
 PRUNER="comb"
 FISHER_DAMP="1e-5"
-EPOCH_END="2"
+EPOCH_END="14"
 PROPER_FLAG="1"
-ONE_SHOT="--one-shot"
+# ONE_SHOT="--one-shot"
 #CKP_PATH="${ROOT_DIR}/checkpoints/resnet20_cifar10.pth.tar"
-CKP_PATH="${ROOT_DIR}/checkpoints/resnet20_cifar10.20211026_18-55-28_694095_239.regular_checkpoint.ckpt"
+CKP_PATH="${ROOT_DIR}/checkpoints/resnet20.ckpt"
 
-SPARSITY=$1
-THRESHOLD=$2
-RANGE=$3
-MAX_NO_MATCH=$4
-GPU=$6
+SPARSITY=0.98
+THRESHOLD=1e-4
+RANGE=10
+MAX_NO_MATCH=20
+GPU=0
 args_update_weights="--not-update-weights"
 SWAP_FLAG="--not-swap-one-per-iter"
 N_FLUCTATION=5
@@ -129,7 +131,6 @@ $ONE_SHOT \
 --update-config \
 --prune-class ${PRUNER} \
 --prune-end ${EPOCH_END} \
---prune-freq ${EPOCH_END} \
 --result-file ${CSV_PATH} \
 --seed ${SEED} \
 --deterministic \
@@ -141,7 +142,7 @@ $ONE_SHOT \
 "
 
 if [ "$is_test" -eq 0 ] ; then
-    CUDA_VISIBLE_DEVICES=${GPU} python ${CODE_DIR}/main.py $args $greedy_args &> $LOG_PATH 2>&1
+    CUDA_VISIBLE_DEVICES=${GPU} python3 ${CODE_DIR}/main.py $args $greedy_args &> $LOG_PATH 2>&1
 else
-    CUDA_VISIBLE_DEVICES=${GPU} python ${CODE_DIR}/main.py $args $greedy_args 
+    CUDA_VISIBLE_DEVICES=${GPU} python3 ${CODE_DIR}/main.py $args $greedy_args 
 fi

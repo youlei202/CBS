@@ -4,7 +4,7 @@ from torch.utils.data.sampler import SubsetRandomSampler
 import torch.nn.functional as F
 import time
 import logging
-from utils.utils import flatten_tensor_list, get_summary_stats, get_total_sparsity
+from utils.utils import flatten_tensor_list, get_summary_stats, get_total_sparsity, add_noise_to_grads
 from policies.pruners import GradualPruner
 import math
 import pickle
@@ -58,6 +58,7 @@ class BlockwiseWoodburryFisherPruner(GradualPruner):
                     params.append(param)
 
         grads = torch.autograd.grad(ys, params)  # first order gradient
+        # grads = add_noise_to_grads(grads)
 
         # Do gradient_masking: mask out the parameters which have been pruned previously
         # to avoid rogue calculations for the hessian
@@ -659,7 +660,7 @@ class BlockwiseWoodburryFisherPruner(GradualPruner):
             if self._param_idx not in self._block_fisher_inv_dic:
                 inv_timer.start()
                 self._compute_block_woodburry_fisher_inverse(module.weight, self._param_idx, device)
-                self._dump_fisher_inv(idx, self._param_idx)
+                # self._dump_fisher_inv(idx, self._param_idx)
                 inv_timer.stop()
             #import pdb;pdb.set_trace()
             #layer_fisher_inv_dict = {'layer_start': self._param_idx, 

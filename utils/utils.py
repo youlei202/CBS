@@ -11,6 +11,8 @@ from utils.masking_utils import is_wrapped_layer
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 import torch.nn as nn
+import copy
+import numpy as np
 
 
 def top_accuracy(args, output, target):
@@ -338,6 +340,59 @@ def add_outer_products_efficient_v1(mat, vec, num_parts=2):
                 torch.ger(vec[i * piece:min((i + 1) * piece, vec_len)], vec[j * piece:min((j + 1) * piece, vec_len)])
             )
     return mat
+
+
+# def add_noise_to_grads(grads, noise_std_scale=1, prop=0.3):
+#     # Randomly select indices
+#     noise_std_dev = noise_std_scale * torch.std(grads)
+#     m = int(grads.size(0) * prop)
+#     indices = torch.randperm(grads.size(0))[:m]
+#     indices = indices.to(grads.device)
+
+#     # Generate Gaussian noise to add
+#     noise = torch.normal(0, noise_std_dev, size=(m,))
+#     noise = noise.to(grads.device)
+
+#     # Add the noise to the randomly selected elements
+#     grads[indices] += noise
+
+#     return grads
+
+def add_noise_to_grads(grads, noise_std_scale=2, prop=0.1):
+    if isinstance(grads, tuple):
+        # Save the original shapes for later
+        original_shapes = [g.shape for g in grads]
+
+        # Concatenate all tensors in grads into a 1-D tensor
+        grads = torch.cat([g.view(-1) for g in grads])
+
+    # Randomly select indices
+    noise_std_dev = noise_std_scale * torch.std(grads)
+    m = int(grads.size(0) * prop)
+    indices = torch.randperm(grads.size(0))[:m]
+    indices = indices.to(grads.device)
+
+    # Generate Gaussian noise to add
+    noise = torch.normal(0, noise_std_dev, size=(m,))
+    noise = noise.to(grads.device)
+
+    # Add the noise to the randomly selected elements
+    grads[indices] += noise
+
+    if 'original_shapes' in locals():
+        # If grads was originally a tuple, split it back into a tuple of tensors
+
+        # Calculate the sizes for splitting
+        split_sizes = [np.prod(shape) for shape in original_shapes]
+
+        # Split grads back into a tuple of tensors
+        split_grads = torch.split(grads, split_sizes)
+
+        # Reshape each tensor in split_grads back to its original shape
+        grads = tuple(g.view(shape) for g, shape in zip(split_grads, original_shapes))
+
+    return grads
+
 
 class LabelSmoothing(nn.Module):
     """

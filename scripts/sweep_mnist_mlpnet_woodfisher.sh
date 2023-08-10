@@ -30,7 +30,7 @@ DATA_PATH=../datasets/
 CONFIG_PATH=./configs/mlpnet_mnist_config_one_shot_woodburry_fisher.yaml
 PRUNER=woodfisher
 EPOCHS=100
-FISHER_SUBSAMPLE_SIZE=10000
+FISHER_SUBSAMPLE_SIZE=1000
 FISHER_MINI_BSZ=1
 LOAD_FROM="./checkpoints/mnist_25_epoch_93.97.ckpt"
 BSZ=64
@@ -51,7 +51,7 @@ mkdir -p ${LOG_DIR}
 RESULT_PATH="${CSV_DIR}/${name}.csv"
 LOG_PATH="${LOG_DIR}/${name}.log"
 
-ONE_SHOT="--one-shot"
+# ONE_SHOT="--one-shot"
 SCALE_PRUNE_UPDATE=0.9
 
 echo "EXPERIMENT $EXP_NAME"
