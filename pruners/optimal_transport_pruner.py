@@ -358,11 +358,18 @@ class OptimalTransportPruner(GradualPruner):
         original_distr_mass = [1 / n for i in range(n)]
         embedded_distr_mass = [1 / n for i in range(n)]
 
-        # PI = np.eye(n) / n
-        # PI = ot.emd(original_distr_mass, embedded_distr_mass, M)
-        PI = ot.bregman.sinkhorn(
-            original_distr_mass, embedded_distr_mass, M, reg=reg, numItermax=5000
-        )
+        if reg == 'inf':
+            PI = np.ones((n,n))/n**2
+        elif reg <= 1e-10:
+            PI = ot.emd(original_distr_mass, embedded_distr_mass, M)
+        else:
+            PI = ot.bregman.sinkhorn(
+                original_distr_mass, embedded_distr_mass, M, reg=reg, numItermax=5000
+            )
+            # PI = ot.bregman.sinkhorn_epsilon_scaling(
+            #     original_distr_mass, embedded_distr_mass, M, reg=reg, numItermax=5000
+            # )
+            
 
         return torch.from_numpy(PI).float().to(w.device), torch.from_numpy(
             M
@@ -504,20 +511,21 @@ class OptimalTransportPruner(GradualPruner):
             set_mask=True,
         )
 
-        if self.args.ot:
-            # np.savetxt("X.csv", (X).detach().cpu().numpy(), delimiter=",")
-            # np.savetxt("w.csv", (w).detach().cpu().numpy(), delimiter=",")
-            # np.savetxt("w_bar.csv", (w_bar).detach().cpu().numpy(), delimiter=",")
-            # np.savetxt("PI.csv", PI.detach().cpu().numpy(), delimiter=",")
+        if self.args.ot and self.args.dump_ot_files:
 
+            od = (X @ w_bar)
+            ed = (X @ w)
 
-            _, indices_Xwbar = torch.sort(X @ w_bar)
-            _, indices_Xw = torch.sort(X @ w)
+            sorted_od, indices_Xwbar = torch.sort(od)
+            sorted_ed, indices_Xw = torch.sort(ed)
+
             sorted_PI = PI[indices_Xwbar]
             sorted_PI = sorted_PI[:, indices_Xw]
-            plt.imshow(sorted_PI.detach().cpu().numpy())
-            plt.savefig("transportation_plan.png", format="png")
-            # np.savetxt("M.csv", M, delimiter=",")
+
+            np.savetxt(f"./logs/ot_files/std_1_prop_01/od_reg={self.args.reg}_seed={self.args.seed}.csv", sorted_od.detach().cpu().numpy(), delimiter=",")
+            np.savetxt(f"./logs/ot_files/std_1_prop_01/ed_reg={self.args.reg}_seed={self.args.seed}.csv", sorted_ed.detach().cpu().numpy(), delimiter=",")
+            np.savetxt(f"./logs/ot_files/std_1_prop_01/PI_reg={self.args.reg}_seed={self.args.seed}.csv", sorted_PI.detach().cpu().numpy(), delimiter=",")
+
 
     def on_epoch_begin(
         self, dset, subset_inds, device, num_workers, epoch_num, **kwargs
@@ -592,7 +600,7 @@ class OptimalTransportPruner(GradualPruner):
             target_weights=self._target_weights,
             lam=0,
             transport=self.args.ot,
-            reg=1.0,
+            reg=self.args.reg,
             dset=dset,
             subset_inds=subset_inds,
             device=device,
