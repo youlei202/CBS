@@ -890,5 +890,16 @@ def get_parser():
         type=float,
         help="add noise to pruning"
     ) # --add-noise 0.1 0.2
+    parser.add_argument(
+        "--reg",
+        default=1.0,
+        type=float,
+        help="ot regularization coefficient"
+    ) # --reg 1.0
+    parser.add_argument(
+        "--dump-ot-files",
+        action="store_true",
+        help="Dumping optimal transport files!",
+    )
 
     return parser.parse_args()
