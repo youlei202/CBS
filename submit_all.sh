@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Directory containing the files
-dir="./scripts/study2"
+dir="./scripts/study1"
 
 # Loop through all the files in the directory
 for file in "$dir"/*
