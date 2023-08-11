@@ -18,17 +18,18 @@ Official Code of [Robust Network Pruning With Sparse Entropic Wasserstein Regres
     Please download checkpoints from [here](https://drive.google.com/drive/folders/18ix239cy261ug_IGZbhtYKPzkkniTyee?usp=sharing) and put them in the "checkpoints" folder. 
 
 3. Run Entropic Wasserstein Pruning:
+   
    3.1 on MLPNet
    ```
-       sh scripts/sweep_mnist_mlpnet_ot.sh
+   sh scripts/sweep_mnist_mlpnet_ot.sh
    ```
    3.2 on ResNet20
    ```
-       sh scripts/sweep_cifar10_resnet20_ot.sh
+   sh scripts/sweep_cifar10_resnet20_ot.sh
    ```
    3.3 on MobileNetV1
    ```
-       sh scripts/sweep_imagenet_mobilenet_ot.sh
+   sh scripts/sweep_imagenet_mobilenet_ot.sh
    ```
    
 
