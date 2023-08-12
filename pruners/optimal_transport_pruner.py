@@ -579,26 +579,26 @@ class OptimalTransportPruner(GradualPruner):
         total_stages = (self._end - self._start) // self._freq
         print(f"PRUNING STAGE {pruning_stage}")
 
-        # linear increasing sparsity
-        sparsity = (
-            pruning_stage / total_stages * self._target_sparsity
-        )  
+        # # linear increasing sparsity
+        # sparsity = (
+        #     pruning_stage / total_stages * self._target_sparsity
+        # )  
 
-        # exponential increasing sparsity
-        # if total_stages > 1:
-        #     sparsity = (
-        #         self._target_sparsity
-        #         + (self._initial_sparsity - self._target_sparsity)
-        #         * (1 - (pruning_stage-1) / (total_stages-1)) ** 3
-        #     ) # cubic increasing sparsity
-        # else:
-        #     sparsity = self._target_sparsity
+        exponential increasing sparsity
+        if total_stages > 1:
+            sparsity = (
+                self._target_sparsity
+                + (self._initial_sparsity - self._target_sparsity)
+                * (1 - (pruning_stage-1) / (total_stages-1)) ** 3
+            ) # cubic increasing sparsity
+        else:
+            sparsity = self._target_sparsity
 
         print(f"Sparsity={sparsity}")
         self._get_weight_update(
             grads=grads,
             target_weights=self._target_weights,
-            lam=0,
+            lam=0.01,
             transport=self.args.ot,
             reg=self.args.reg,
             dset=dset,
