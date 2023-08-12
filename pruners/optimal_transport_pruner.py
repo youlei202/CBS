@@ -12,7 +12,12 @@ import torch.nn.functional as F
 import time
 import logging
 
-from utils.utils import flatten_tensor_list, get_summary_stats, dump_tensor_to_mat, add_noise_to_grads
+from utils.utils import (
+    flatten_tensor_list,
+    get_summary_stats,
+    dump_tensor_to_mat,
+    add_noise_to_grads,
+)
 from policies.pruners import GradualPruner
 from utils.plot import analyze_new_weights
 from common.io import _load, _dump
@@ -80,7 +85,9 @@ class OptimalTransportPruner(GradualPruner):
         grads = torch.autograd.grad(ys, params)  # first order gradient
         if self.args.add_noise:
             noise_values = self.args.add_noise
-            grads = add_noise_to_grads(grads, noise_std_scale=noise_values[0], prop=noise_values[1])
+            grads = add_noise_to_grads(
+                grads, noise_std_scale=noise_values[0], prop=noise_values[1]
+            )
 
         # Do gradient_masking: mask out the parameters which have been pruned previously
         # to avoid rogue calculations for the hessian
@@ -275,7 +282,9 @@ class OptimalTransportPruner(GradualPruner):
         if k < 1:
             return torch.zeros(len(x))
         weights = x.clone()
-        threshold = weights.abs().flatten().kthvalue(int(weights.numel() - k + 1), dim=-1)[0]
+        threshold = (
+            weights.abs().flatten().kthvalue(int(weights.numel() - k + 1), dim=-1)[0]
+        )
         weights[weights.abs() < threshold] = 0
         return weights
 
@@ -335,8 +344,8 @@ class OptimalTransportPruner(GradualPruner):
         original_distr = original_distr.detach().cpu().numpy()
         embedded_distr = embedded_distr.detach().cpu().numpy()
 
-        original_distr = (original_distr)
-        embedded_distr = (embedded_distr)
+        original_distr = original_distr
+        embedded_distr = embedded_distr
 
         # Compute the cost matrix (squared Euclidean distance) between original_distr and embedded_distr
         M = ot.dist(
@@ -358,8 +367,8 @@ class OptimalTransportPruner(GradualPruner):
         original_distr_mass = [1 / n for i in range(n)]
         embedded_distr_mass = [1 / n for i in range(n)]
 
-        if reg == 'inf':
-            PI = np.ones((n,n))/n**2
+        if reg == "inf":
+            PI = np.ones((n, n)) / n**2
         elif reg <= 1e-10:
             PI = ot.emd(original_distr_mass, embedded_distr_mass, M)
         else:
@@ -369,7 +378,6 @@ class OptimalTransportPruner(GradualPruner):
             # PI = ot.bregman.sinkhorn_epsilon_scaling(
             #     original_distr_mass, embedded_distr_mass, M, reg=reg, numItermax=5000
             # )
-            
 
         return torch.from_numpy(PI).float().to(w.device), torch.from_numpy(
             M
@@ -512,9 +520,8 @@ class OptimalTransportPruner(GradualPruner):
         )
 
         if self.args.ot and self.args.dump_ot_files:
-
-            od = (X @ w_bar)
-            ed = (X @ w)
+            od = X @ w_bar
+            ed = X @ w
 
             sorted_od, indices_Xwbar = torch.sort(od)
             sorted_ed, indices_Xw = torch.sort(ed)
@@ -522,16 +529,27 @@ class OptimalTransportPruner(GradualPruner):
             sorted_PI = PI[indices_Xwbar]
             sorted_PI = sorted_PI[:, indices_Xw]
 
-            np.savetxt(f"./logs/ot_files/std_1_prop_01/od_reg={self.args.reg}_seed={self.args.seed}.csv", sorted_od.detach().cpu().numpy(), delimiter=",")
-            np.savetxt(f"./logs/ot_files/std_1_prop_01/ed_reg={self.args.reg}_seed={self.args.seed}.csv", sorted_ed.detach().cpu().numpy(), delimiter=",")
-            np.savetxt(f"./logs/ot_files/std_1_prop_01/PI_reg={self.args.reg}_seed={self.args.seed}.csv", sorted_PI.detach().cpu().numpy(), delimiter=",")
-
+            np.savetxt(
+                f"./logs/ot_files/std_1_prop_01/od_reg={self.args.reg}_seed={self.args.seed}.csv",
+                sorted_od.detach().cpu().numpy(),
+                delimiter=",",
+            )
+            np.savetxt(
+                f"./logs/ot_files/std_1_prop_01/ed_reg={self.args.reg}_seed={self.args.seed}.csv",
+                sorted_ed.detach().cpu().numpy(),
+                delimiter=",",
+            )
+            np.savetxt(
+                f"./logs/ot_files/std_1_prop_01/PI_reg={self.args.reg}_seed={self.args.seed}.csv",
+                sorted_PI.detach().cpu().numpy(),
+                delimiter=",",
+            )
 
     def on_epoch_begin(
         self, dset, subset_inds, device, num_workers, epoch_num, **kwargs
     ):
         meta = {}
-        if self._pruner_not_active(epoch_num) or self._end==1:
+        if self._pruner_not_active(epoch_num) or self._end == 1:
             print("Pruner is not ACTIVEEEE yaa!")
             self._target_weights, self._original_mask = self._get_weights()
             return False, {}
@@ -582,15 +600,15 @@ class OptimalTransportPruner(GradualPruner):
         # # linear increasing sparsity
         # sparsity = (
         #     pruning_stage / total_stages * self._target_sparsity
-        # )  
+        # )
 
-        exponential increasing sparsity
+        # exponential increasing sparsity
         if total_stages > 1:
             sparsity = (
                 self._target_sparsity
                 + (self._initial_sparsity - self._target_sparsity)
-                * (1 - (pruning_stage-1) / (total_stages-1)) ** 3
-            ) # cubic increasing sparsity
+                * (1 - (pruning_stage - 1) / (total_stages - 1)) ** 3
+            )  # cubic increasing sparsity
         else:
             sparsity = self._target_sparsity
 
