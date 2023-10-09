@@ -34,6 +34,6 @@ Official Code of [Robust Network Pruning With Sparse Entropic Wasserstein Regres
    
 
 ## Citaton
-We thank Singh & Alistarh for sharing their code of [WoodFisher](https://github.com/IST-DASLab/WoodFisher). We thank also Yu, Xin and Serra et. al. for the CBS code [CBS](https://github.com/yuxwind/cbs), from which the repository is forked.
+We thank Singh & Alistarh for sharing their code of [WoodFisher](https://github.com/IST-DASLab/WoodFisher). We thank also Yu, Xin and Serra et. al. for the CBS code [CBS](https://github.com/yuxwind/cbs), from which the repository is forked. Our implementation is based on their code. 
 
-Our implementation is based on their code. If our work is helpful to your research/project, please cite our work.
+If our work is helpful to your research/project, we appreciate you to cite.
