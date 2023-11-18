@@ -121,7 +121,7 @@ def get_parser():
     parser.add_argument(
         "--checkpoint_freq",
         type=int,
-        default=1,
+        default=100,
         help="epoch frequency with which the checkpoints are dumped; at each time, two checkpoints are maintained:"
         + "latest and best on validation/test set",
     )

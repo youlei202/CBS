@@ -7,6 +7,7 @@ import torch
 from models.resnet_imagenet import *
 from models.resnet_cifar10 import *
 from models.resnet_cifar10_swish import *
+from models.resnet_cifar10_pretrained import *
 from models.logistic_regression import *
 from models.resnet_mixed_cifar10 import *
 from models.resnet_mixed_imagenet import *
@@ -33,7 +34,7 @@ def get_model(name, dataset, pretrained=False, use_butterfly=False,
               use_se=False, se_ratio=None, kernel_sizes=None, p=None, args=None):
     if name.startswith('resnet') and dataset == 'cifar10':
         if name == 'resnet50' and pretrained:
-            return torch_resnet50(pretrained=True)
+            return resnet50(pretrained=True, device='cuda')
         if name == 'resnet18' and dataset == 'cifar10':
             return resnet18()
         try:
