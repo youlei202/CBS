@@ -11,3 +11,4 @@ datasets
 *.csv
 *.pth
 *.png
+models/state_dicts/*.pt

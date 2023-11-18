@@ -549,7 +549,7 @@ class OptimalTransportPruner(GradualPruner):
         self, dset, subset_inds, device, num_workers, epoch_num, **kwargs
     ):
         meta = {}
-        if self._pruner_not_active(epoch_num) or self._end == 1:
+        if epoch_num==0 or self._pruner_not_active(epoch_num) or self._end == 1:
             print("Pruner is not ACTIVEEEE yaa!")
             self._target_weights, self._original_mask = self._get_weights()
             return False, {}
