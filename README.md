@@ -1,5 +1,5 @@
-# Entropic Wasserstein Regression Pruning
-Official Code of [Robust Network Pruning With Sparse Entropic Wasserstein Regression]()[ICLR2024]
+# SWAP Network Pruning
+Official Code of [SWAP: Sparse Entropic Wasserstein Regression for Robust Network Pruning]()[ICLR2024]
 
 1. Setup the enviroment:
     ```
