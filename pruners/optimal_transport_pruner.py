@@ -435,7 +435,7 @@ class OptimalTransportPruner(GradualPruner):
             delta_Qw = X.T @ (X @ w - y) + n_torch * lam_torch * (w - w_bar)
         else:
             print("\t Perform optimal transport update")
-            delta_Qw = (X.T @ (PI @ (X @ w - y)) + lam_torch * (w - w_bar)) * n_torch
+            delta_Qw = X.T @ (PI @ (X @ w - y)) + lam_torch * (w - w_bar)
 
         print(f"\t delta_Qw={delta_Qw}")
         tau_c = self.__find_tau_c(a=w, b=delta_Qw, k=non_zero_params_num)
@@ -549,7 +549,7 @@ class OptimalTransportPruner(GradualPruner):
         self, dset, subset_inds, device, num_workers, epoch_num, **kwargs
     ):
         meta = {}
-        if epoch_num==0 or self._pruner_not_active(epoch_num) or self._end == 1:
+        if epoch_num == 0 or self._pruner_not_active(epoch_num) or self._end == 1:
             print("Pruner is not ACTIVEEEE yaa!")
             self._target_weights, self._original_mask = self._get_weights()
             return False, {}
